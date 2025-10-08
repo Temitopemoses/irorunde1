@@ -5,24 +5,40 @@ const LoginPage = () => {
   const [identifier, setIdentifier] = useState(""); // phone or username
   const [password, setPassword] = useState("");
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!role) return alert("Select role");
+  if (!identifier || !password) return alert("Fill fields");
 
-    if (!role) {
-      alert("Please select login type");
-      return;
+  const endpoint = role === "member" ? "/api/member/login/" : "/api/admin/login/";
+  try {
+    const res = await fetch("http://127.0.0.1:8000" + endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return alert(data.detail || data.message || "Login failed");
     }
 
-    if (!identifier || !password) {
-      alert("Please fill all fields");
-      return;
+    // Save access token in localStorage for protected calls
+    if (data.tokens && data.tokens.access) {
+      localStorage.setItem("accessToken", data.tokens.access);
+      if (data.tokens.refresh) {
+        localStorage.setItem("refreshToken", data.tokens.refresh);
+      }
     }
 
-    console.log(`${role} login:`, { identifier, password });
-    // TODO: Send login request to Django backend
-    // For example:
-    // fetch(`/api/${role}/login/`, { method: 'POST', body: JSON.stringify({ identifier, password }) })
-  };
+    alert("Login successful");
+    if (role === "member") window.location.href = "/member-dashboard";
+    else window.location.href = "/admin-dashboard";
+  } catch (err) {
+    console.error(err);
+    alert("Network error");
+  }
+};
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

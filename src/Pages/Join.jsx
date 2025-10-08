@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PaystackButton } from "react-paystack";
 
 const Join = () => {
   const [step, setStep] = useState(1);
@@ -31,15 +32,51 @@ const Join = () => {
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (formData.paymentConfirmed) {
+const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (!formData.paymentConfirmed) {
+    alert("Please confirm your ₦20,300 payment to complete registration.");
+    return;
+  }
+
+  const data = new FormData();
+  for (const key in formData) {
+    data.append(key, formData[key]);
+  }
+
+  try {
+    const response = await fetch("http://127.0.0.1:8000/api/join/", {
+      method: "POST",
+      body: data,
+    });
+
+    if (response.ok) {
       alert("Registration successful! Welcome to Irorunde Cooperative Society.");
-      console.log("Submitted data:", formData);
+      setStep(1);
+      setFormData({
+        group: "",
+        passport: null,
+        name: "",
+        surname: "",
+        phone: "",
+        address: "",
+        kinName: "",
+        kinSurname: "",
+        kinPhone: "",
+        kinAddress: "",
+        paymentConfirmed: false,
+      });
     } else {
-      alert("Please confirm your ₦20,300 payment to complete registration.");
+      const errData = await response.json();
+      console.error(errData);
+      alert("Error submitting form. Check console for details.");
     }
-  };
+  } catch (err) {
+    console.error(err);
+    alert("Something went wrong. Please try again.");
+  }
+};
 
   const paystackProps = {
     email,
