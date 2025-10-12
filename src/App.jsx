@@ -4,7 +4,8 @@ import Home from "./Pages/home";
 import Join from "./Pages/Join";    
 import LoginPage from "./Pages/LoginPage";
 import MemberDashboard from "./Pages/MemberDashboard";
-
+import AdminLogin from './components/admin/AdminLogin';
+import SuperAdminDashboard from './components/admin/SuperAdminDashboard';
 
 
 function App() {
@@ -27,6 +28,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
           <Route path="/member-dashboard" element={<MemberDashboard />} />
           <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/system-admin" element={<AdminLogin />} />
+          <Route path="/superadmin-dashboard" element={<SuperAdminDashboard />} />
       </Routes>
     </Router>
   );
