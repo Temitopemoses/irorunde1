@@ -1,8 +1,11 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Home from "./Pages/home";
 import Join from "./Pages/Join";    
 import LoginPage from "./Pages/LoginPage";
+import MemberDashboard from "./Pages/MemberDashboard";
+
+
 
 function App() {
   return (
@@ -22,6 +25,8 @@ function App() {
         {/* Join page without navbar */}
         <Route path="/Join" element={<Join />} />
         <Route path="/login" element={<LoginPage />} />
+          <Route path="/member-dashboard" element={<MemberDashboard />} />
+          <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
     </Router>
   );

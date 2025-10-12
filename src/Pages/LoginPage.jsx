@@ -1,111 +1,107 @@
 import React, { useState } from "react";
 
 const LoginPage = () => {
-  const [role, setRole] = useState(""); // "member" or "admin"
-  const [identifier, setIdentifier] = useState(""); // phone or username
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [surname, setSurname] = useState("");
+  const [loading, setLoading] = useState(false);
 
-const handleSubmit = async (e) => {
+ const handleSubmit = async (e) => {
   e.preventDefault();
-  if (!role) return alert("Select role");
-  if (!identifier || !password) return alert("Fill fields");
+  if (!phone || !surname) return alert("Please fill in both phone number and surname");
 
-  const endpoint = role === "member" ? "/api/member/login/" : "/api/admin/login/";
+  setLoading(true);
   try {
-    const res = await fetch("http://127.0.0.1:8000" + endpoint, {
+    const response = await fetch("http://127.0.0.1:8000/api/member-login/", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ identifier, password }),
+      headers: { 
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ 
+        phone: phone.trim(), 
+        surname: surname.trim() 
+      }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      return alert(data.detail || data.message || "Login failed");
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Login failed");
     }
 
-    // Save access token in localStorage for protected calls
-    if (data.tokens && data.tokens.access) {
-      localStorage.setItem("accessToken", data.tokens.access);
-      if (data.tokens.refresh) {
-        localStorage.setItem("refreshToken", data.tokens.refresh);
-      }
-    }
+    // Save tokens and user data
+    localStorage.setItem("accessToken", data.access);
+    localStorage.setItem("refreshToken", data.refresh);
+    localStorage.setItem("userData", JSON.stringify(data));
 
-    alert("Login successful");
-    if (role === "member") window.location.href = "/member-dashboard";
-    else window.location.href = "/admin-dashboard";
+    alert(`Welcome back, ${data.first_name} ${data.last_name}!`);
+    
+    // REDIRECT TO MEMBER DASHBOARD
+    window.location.href = "/member-dashboard";
+
   } catch (err) {
-    console.error(err);
-    alert("Network error");
+    alert(err.message || "Login failed. Please check your credentials.");
+  } finally {
+    setLoading(false);
   }
 };
-
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-md">
         <h2 className="text-2xl font-bold mb-6 text-center text-amber-600">
-          Irorunde Cooperative Login
+          Irorunde Member Login
         </h2>
+        
+        <p className="text-sm text-gray-600 text-center mb-6">
+          Use your registered phone number and surname to login
+        </p>
 
-        {/* Select role */}
-        <div className="flex justify-center space-x-3 mb-6">
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Phone Number *
+            </label>
+            <input
+              type="tel"
+              placeholder="Enter your registered phone number"
+              className="w-full p-3 border rounded-lg focus:ring focus:ring-amber-200 focus:border-amber-500 outline-none"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Surname *
+            </label>
+            <input
+              type="text"
+              placeholder="Enter your surname"
+              className="w-full p-3 border rounded-lg focus:ring focus:ring-amber-200 focus:border-amber-500 outline-none"
+              value={surname}
+              onChange={(e) => setSurname(e.target.value)}
+              required
+            />
+          </div>
+
           <button
-            type="button"
-            className={`px-4 py-2 rounded-lg border transition ${
-              role === "member"
-                ? "bg-amber-600 text-white border-amber-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-amber-400"
-            }`}
-            onClick={() => setRole("member")}
+            type="submit"
+            disabled={loading}
+            className="w-full bg-amber-600 text-white p-3 rounded-lg hover:bg-amber-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Member
+            {loading ? "Logging in..." : "Login as Member"}
           </button>
-          <button
-            type="button"
-            className={`px-4 py-2 rounded-lg border transition ${
-              role === "admin"
-                ? "bg-amber-600 text-white border-amber-600"
-                : "bg-white text-gray-700 border-gray-300 hover:border-amber-400"
-            }`}
-            onClick={() => setRole("admin")}
-          >
-            Admin
-          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-sm text-gray-600">
+            Don't have an account?{" "}
+            <a href="/join" className="text-amber-600 hover:text-amber-700 font-medium">
+              Register here
+            </a>
+          </p>
         </div>
-
-        {/* Login form */}
-        {role && (
-          <form onSubmit={handleSubmit}>
-            <input
-              type={role === "member" ? "tel" : "text"}
-              placeholder={
-                role === "member"
-                  ? "Registered Phone Number"
-                  : "Admin Username"
-              }
-              className="w-full mb-4 p-3 border rounded-lg focus:ring focus:ring-amber-200 focus:border-amber-500 outline-none"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              required
-            />
-
-            <input
-              type="password"
-              placeholder="Password"
-              className="w-full mb-4 p-3 border rounded-lg focus:ring focus:ring-amber-200 focus:border-amber-500 outline-none"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-
-            <button
-              type="submit"
-              className="w-full bg-amber-600 text-white p-3 rounded-lg hover:bg-amber-700 transition font-semibold"
-            >
-              Login
-            </button>
-          </form>
-        )}
       </div>
     </div>
   );
