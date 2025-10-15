@@ -23,6 +23,109 @@ from .models import ContributionPlan, Transaction, MemberContribution
 from django.contrib.auth import authenticate
 
 
+# =============================
+# GROUP ADMIN DASHBOARD VIEWS
+# =============================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_admin_stats(request):
+    """Get statistics for group admin dashboard"""
+    if request.user.role != 'group_admin' or not request.user.managed_group:
+        return Response({"error": "Access denied"}, status=403)
+    
+    group = request.user.managed_group
+    
+    # Calculate stats
+    total_members = Member.objects.filter(group=group).count()
+    active_members = Member.objects.filter(group=group, status='active').count()
+    total_payments = Payment.objects.filter(member__group=group, is_successful=True).count()
+    pending_payments = Payment.objects.filter(member__group=group, is_successful=False).count()
+    
+    return Response({
+        'totalMembers': total_members,
+        'activeMembers': active_members,
+        'totalPayments': total_payments,
+        'pendingPayments': pending_payments,
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_admin_members(request):
+    """Get members for group admin dashboard"""
+    if request.user.role != 'group_admin' or not request.user.managed_group:
+        return Response({"error": "Access denied"}, status=403)
+    
+    group = request.user.managed_group
+    members = Member.objects.filter(group=group).select_related('user').order_by('-registration_date')
+    
+    member_data = []
+    for member in members:
+        member_data.append({
+            'id': member.id,
+            'user': {
+                'first_name': member.user.first_name,
+                'last_name': member.user.last_name,
+            },
+            'phone': member.phone,
+            'status': member.status,
+            'membership_number': member.membership_number,
+            'registration_date': member.registration_date,
+        })
+    
+    return Response(member_data)
+
+class GroupAdminLoginView(APIView):
+    def post(self, request):
+        try:
+            username = request.data.get('username')
+            password = request.data.get('password')
+            
+            if not username or not password:
+                return Response({
+                    'error': 'Username and password are required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            user = authenticate(username=username, password=password)
+            
+            if user is not None:
+                if user.is_active and (user.is_staff or user.is_superuser):
+                    # Generate JWT tokens
+                    refresh = RefreshToken.for_user(user)
+                    
+                    return Response({
+                        'token': str(refresh.access_token),
+                        'refresh': str(refresh),
+                        'user': {
+                            'id': user.id,
+                            'username': user.username,
+                            'email': user.email,
+                            'first_name': user.first_name,
+                            'last_name': user.last_name,
+                            'role': 'group_admin',
+                            'is_staff': user.is_staff,
+                            'is_superuser': user.is_superuser
+                        }
+                    })
+                else:
+                    return Response({
+                        'error': 'Account not authorized for group admin access'
+                    }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                return Response({
+                    'error': 'Invalid username or password'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+                
+        except Exception as e:
+            return Response({
+                'error': f'Login failed: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =============================
+# EXISTING VIEWS (KEEP AS-IS)
+# =============================
+
 class MemberDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
@@ -381,7 +484,7 @@ class GroupListView(APIView):
     permission_classes = [permissions.AllowAny]
     
     def get(self, request):
-        groups = Group.objects.filter(is_active=True)
+        groups = CooperativeGroup.objects.filter(is_active=True)
         serializer = GroupSerializer(groups, many=True)
         return Response(serializer.data)
 
@@ -612,101 +715,3 @@ def get_groups(request):
     groups = CooperativeGroup.objects.filter(is_active=True)
     data = [{"id": group.id, "name": group.name} for group in groups]
     return Response(data)
-
-
-
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def group_admin_stats(request):
-    """Get statistics for group admin dashboard"""
-    if request.user.role != 'group_admin' or not request.user.managed_group:
-        return Response({"error": "Access denied"}, status=403)
-    
-    group = request.user.managed_group
-    
-    # Calculate stats
-    total_members = Member.objects.filter(group=group).count()
-    active_members = Member.objects.filter(group=group, status='active').count()
-    total_payments = Payment.objects.filter(member__group=group, is_successful=True).count()
-    pending_payments = Payment.objects.filter(member__group=group, is_successful=False).count()
-    
-    return Response({
-        'totalMembers': total_members,
-        'activeMembers': active_members,
-        'totalPayments': total_payments,
-        'pendingPayments': pending_payments,
-    })
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def group_admin_members(request):
-    """Get members for group admin dashboard"""
-    if request.user.role != 'group_admin' or not request.user.managed_group:
-        return Response({"error": "Access denied"}, status=403)
-    
-    group = request.user.managed_group
-    members = Member.objects.filter(group=group).select_related('user').order_by('-registration_date')
-    
-    member_data = []
-    for member in members:
-        member_data.append({
-            'id': member.id,
-            'user': {
-                'first_name': member.user.first_name,
-                'last_name': member.user.last_name,
-            },
-            'phone': member.phone,
-            'status': member.status,
-            'membership_number': member.membership_number,
-            'registration_date': member.registration_date,
-        })
-    
-    return Response(member_data)
-
-class GroupAdminLoginView(APIView):
-    def post(self, request):
-        try:
-            username = request.data.get('username')
-            password = request.data.get('password')
-            
-            if not username or not password:
-                return Response({
-                    'error': 'Username and password are required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            user = authenticate(username=username, password=password)
-            
-            if user is not None:
-                if user.is_active and (user.is_staff or user.is_superuser):
-                    # Generate JWT tokens
-                    refresh = RefreshToken.for_user(user)
-                    
-                    return Response({
-                        'token': str(refresh.access_token),
-                        'refresh': str(refresh),
-                        'user': {
-                            'id': user.id,
-                            'username': user.username,
-                            'email': user.email,
-                            'first_name': user.first_name,
-                            'last_name': user.last_name,
-                            'role': 'group_admin',
-                            'is_staff': user.is_staff,
-                            'is_superuser': user.is_superuser
-                        }
-                    })
-                else:
-                    return Response({
-                        'error': 'Account not authorized for group admin access'
-                    }, status=status.HTTP_403_FORBIDDEN)
-            else:
-                return Response({
-                    'error': 'Invalid username or password'
-                }, status=status.HTTP_401_UNAUTHORIZED)
-                
-        except Exception as e:
-            return Response({
-                'error': f'Login failed: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
