@@ -50,8 +50,8 @@ class GroupAdminRestrictionMixin:
 # ==================== USER ADMIN ====================
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'get_managed_group', 'phone', 'is_staff', 'created_at')
-    list_filter = ('role', 'is_staff', 'is_superuser', 'managed_group', 'created_at')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'get_managed_group', 'phone', 'is_staff_display', 'created_at')
+    list_filter = ('role', 'managed_group', 'created_at')  # REMOVED: 'is_staff' since it's a property
     search_fields = ('username', 'email', 'first_name', 'last_name', 'phone')
     readonly_fields = ('created_at',)
     actions = [make_superadmin, make_group_admin, make_member_role]
@@ -81,6 +81,11 @@ class CustomUserAdmin(UserAdmin):
     def get_managed_group(self, obj):
         return obj.managed_group.name if obj.managed_group else "None"
     get_managed_group.short_description = 'Managed Group'
+    
+    def is_staff_display(self, obj):
+        return obj.is_staff
+    is_staff_display.short_description = 'Staff Access'
+    is_staff_display.boolean = True
 
 # ==================== MEMBER ADMIN ====================
 @admin.register(Member)
@@ -88,7 +93,7 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = (
         'membership_number', 
         'get_user_full_name', 
-        'get_group_name',  # FIXED: Show group name
+        'get_group_name',
         'phone', 
         'status', 
         'membership_fee_paid', 
@@ -102,10 +107,10 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         'membership_number', 
         'phone',
         'user__email',
-        'group__name'  # Added group name to search
+        'group__name'
     )
     readonly_fields = ('registration_date', 'passport_photo_preview', 'membership_number')
-    list_select_related = ('user', 'group')  # Important for performance
+    list_select_related = ('user', 'group')
     list_per_page = 20
     actions = [activate_members, deactivate_members, mark_payment_paid]
     
@@ -114,7 +119,7 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
             'fields': (
                 'user', 
                 'membership_number', 
-                'group',  # This should show properly now
+                'group',
                 'status',
                 'registration_date'
             )
@@ -198,7 +203,7 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = (
         'id',
         'get_member_name',
-        'get_member_group',  # Added member's group
+        'get_member_group',
         'amount',
         'payment_method',
         'is_successful',
@@ -211,10 +216,10 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         'member__user__last_name',
         'member__membership_number',
         'paystack_reference',
-        'member__group__name'  # Added group search
+        'member__group__name'
     )
     readonly_fields = ('created_at', 'paid_at')
-    list_select_related = ('member__user', 'member__group')  # Added group to select_related
+    list_select_related = ('member__user', 'member__group')
     list_per_page = 20
     actions = [mark_payment_successful]
     
@@ -252,7 +257,7 @@ class NextOfKinAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = ('get_full_name', 'phone', 'get_member_name', 'get_member_group', 'relationship')
     list_filter = ('relationship',)
     search_fields = ('first_name', 'last_name', 'phone', 'member__user__first_name', 'member__user__last_name', 'member__group__name')
-    list_select_related = ('member__user', 'member__group')  # Added group to select_related
+    list_select_related = ('member__user', 'member__group')
     list_per_page = 20
     
     fieldsets = (

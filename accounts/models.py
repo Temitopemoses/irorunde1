@@ -40,19 +40,56 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.username} - {self.get_role_display()}"
     
+    # === ONLY THESE 3 METHODS WERE ADDED/MODIFIED ===
+    @property
+    def is_staff(self):
+        """Group admins and superadmins can access Django admin"""
+        return self.role in ['group_admin', 'superadmin'] or self.is_superuser
+    
     def has_perm(self, perm, obj=None):
-        """Group admins and superadmins have all permissions"""
-        if self.role in ['group_admin', 'superadmin']:
+        """Check if user has specific permission"""
+        # Superadmins have all permissions
+        if self.role == 'superadmin' or self.is_superuser:
             return True
+        
+        # Group admins have limited permissions for their group
+        if self.role == 'group_admin':
+            # Define allowed permissions for group admins
+            allowed_permissions = [
+                # Member permissions
+                'accounts.view_member', 'accounts.change_member',
+                # Next of Kin permissions  
+                'accounts.view_nextofkin', 'accounts.change_nextofkin',
+                # Payment permissions
+                'accounts.view_payment', 'accounts.change_payment',
+                # Transaction permissions
+                'accounts.view_transaction', 'accounts.change_transaction',
+                # Member Contribution permissions
+                'accounts.view_membercontribution', 'accounts.change_membercontribution',
+                # User permissions (limited to themselves and their group members)
+                'accounts.view_user', 'accounts.change_user',
+                # Cooperative Group permissions (limited to their managed group)
+                'accounts.view_cooperativegroup', 'accounts.change_cooperativegroup',
+            ]
+            
+            # Check if permission is in allowed list
+            if perm in allowed_permissions:
+                return True
+        
         return super().has_perm(perm, obj)
     
     def has_module_perms(self, app_label):
-        """Check if user has permissions to view the app"""
-        if self.role in ['group_admin', 'superadmin'] and app_label == 'accounts':
+        """Check if user has permissions to view the app in admin"""
+        # Superadmins can access all apps
+        if self.role == 'superadmin' or self.is_superuser:
             return True
-        if self.role == 'superadmin':
+        
+        # Group admins can only access accounts app
+        if self.role == 'group_admin' and app_label == 'accounts':
             return True
+        
         return super().has_module_perms(app_label)
+    # === END OF CHANGES ===
     
     def is_super_admin(self):
         return self.role == 'superadmin' or self.is_superuser
@@ -62,6 +99,8 @@ class User(AbstractUser):
     
     def is_member_user(self):
         return self.role == 'member'
+
+# === EVERYTHING BELOW REMAINS EXACTLY THE SAME ===
 
 class Member(models.Model):
     STATUS_CHOICES = (
