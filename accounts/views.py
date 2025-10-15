@@ -21,6 +21,7 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from .models import ContributionPlan, Transaction, MemberContribution
 from django.contrib.auth import authenticate
+from rest_framework.decorators import action
 
 
 # =============================
@@ -715,3 +716,23 @@ def get_groups(request):
     groups = CooperativeGroup.objects.filter(is_active=True)
     data = [{"id": group.id, "name": group.name} for group in groups]
     return Response(data)
+
+@action(detail=True, methods=['get'])
+def member_details(self, request, pk=None):
+    # Member detail view
+    pass
+
+@action(detail=True, methods=['put'])
+def update_member(self, request, pk=None):
+    # Member update functionality
+    pass
+
+@action(detail=False, methods=['get'])
+def all_members(self, request):
+    # Paginated list of all members
+    pass
+
+@action(detail=False, methods=['get'])
+def generate_report(self, request):
+    # Report generation
+    pass
