@@ -2,6 +2,10 @@ from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
 from .models import Member, Payment, User, CooperativeGroup
@@ -29,7 +33,7 @@ from rest_framework.decorators import action
 # =============================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def group_admin_stats(request):
     """Get statistics for group admin dashboard"""
     if request.user.role != 'group_admin' or not request.user.managed_group:
@@ -51,7 +55,7 @@ def group_admin_stats(request):
     })
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def group_admin_members(request):
     """Get members for group admin dashboard"""
     if request.user.role != 'group_admin' or not request.user.managed_group:
@@ -76,6 +80,7 @@ def group_admin_members(request):
     
     return Response(member_data)
 
+
 class GroupAdminLoginView(APIView):
     def post(self, request):
         try:
@@ -90,7 +95,8 @@ class GroupAdminLoginView(APIView):
             user = authenticate(username=username, password=password)
             
             if user is not None:
-                if user.is_active and (user.is_staff or user.is_superuser):
+                if user.is_active and (user.role == 'group_admin' or user.is_staff or user.is_superuser):
+  
                     # Generate JWT tokens
                     refresh = RefreshToken.for_user(user)
                     
@@ -626,7 +632,7 @@ class SuperAdminLoginView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CreateGroupAdminView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [AllowAny]
     
     def post(self, request):
         # Check if user is superadmin
@@ -742,3 +748,7 @@ def all_members(self, request):
 def generate_report(self, request):
     # Report generation
     pass
+
+@ensure_csrf_cookie
+def get_csrf(request):
+    return JsonResponse({"detail": "CSRF cookie set"})
