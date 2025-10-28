@@ -57,36 +57,26 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
         """
         Handle group validation - create group if it doesn't exist
         """
-        if value:
-            try:
-                # Try to get existing group
-                group = CooperativeGroup.objects.get(name=value)
-                return group  # ← FIXED: Return the instance!
-            except CooperativeGroup.DoesNotExist:
-                # Create new group if it doesn't exist
-                print(f"Group '{value}' not found. Creating new group...")
-                group = CooperativeGroup.objects.create(name=value)
-                print(f"Created new group: {group.name}")
-                return group
-        return None
+        if not value:
+            return None
+        try:
+            # If value is already a group instance
+            if isinstance(value, CooperativeGroup):
+                return value
+
+        # Try by ID
+            if str(value).isdigit():
+                return CooperativeGroup.objects.get(id=int(value))
+
+        # Try by name (case insensitive)
+            return CooperativeGroup.objects.get(name__iexact=value.strip())
+
+        except CooperativeGroup.DoesNotExist:
+        # If not found, create it automatically
+            group = CooperativeGroup.objects.create(name=value.strip())
+            print(f"✅ Created new group '{group.name}' automatically")
+            return group
     
-    def validate(self, data):
-        """
-        Custom validation to handle different scenarios
-        """
-        print("Validation data received:", data)
-        
-        # Check if required fields are present
-        if not data.get('first_name'):
-            raise serializers.ValidationError({"first_name": "First name is required"})
-        
-        if not data.get('surname'):
-            raise serializers.ValidationError({"surname": "Surname is required"})
-        
-        if not data.get('phone'):
-            raise serializers.ValidationError({"phone": "Phone number is required"})
-        
-        return data
     
     def create(self, validated_data):
         print("🟡 STARTING MEMBER CREATION PROCESS")
@@ -120,36 +110,27 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
         
         email = f"{first_name.lower()}@irorunde.com"
         
-        # Generate random password
-        random_password = get_random_string(12)
+      
+        username = phone
+        password = surname
         
-        try:
-            user = User.objects.create(
+        
+        user = User.objects.create(
                 username=username,
                 email=email,
                 first_name=first_name,
                 last_name=surname,
                 phone=phone,
                 address=address,
-                password=make_password(random_password),
+                password=make_password(password),
                 role='member'  # ← CRITICAL FIX: Set user role to 'member'
             )
-            print(f"✅ Created user: {user.username} with role: {user.role}")
-        except Exception as e:
-            print(f"❌ Error creating user: {e}")
-            raise serializers.ValidationError(f"Error creating user: {e}")
-        
-        # CHECK: Make sure member doesn't already exist (safety check)
-        if Member.objects.filter(user=user).exists():
-            print(f"❌ MEMBER ALREADY EXISTS FOR USER: {user.username}")
-            existing_member = Member.objects.get(user=user)
-            print(f"Existing member ID: {existing_member.id}")
-            # Don't delete - just return the existing member
-            return existing_member
+        print(f"✅ Created user: {user.username} with role: {user.role}")
+       
         
         # Create member with payment bypassed
-        try:
-            member = Member.objects.create(
+        
+        member = Member.objects.create(
                 user=user,
                 group=group,
                 passport_photo=passport_photo,
@@ -159,15 +140,11 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
                 status='active'
             )
             
-            # Generate membership number
-            member.membership_number = f"IR{member.id:06d}"
-            member.save()
-            print(f"✅ SUCCESS: Created member: {member.membership_number} in group: {group}")
-        except Exception as e:
-            print(f"❌ Error creating member: {e}")
-            # Delete user if member creation fails
-            user.delete()
-            raise serializers.ValidationError(f"Error creating member: {e}")
+        # Generate membership number
+        member.membership_number = f"IR{member.id:06d}"
+        member.save()
+        print(f"✅ SUCCESS: Created member: {member.membership_number} in group: {group}")
+       
         
         # Create next of kin only if data is provided
         if kin_first_name and kin_surname:
@@ -214,18 +191,16 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
     
 def validate_group(self, value):
     """
-    Handle group validation - accept both group names and IDs
+    Handle group validation - get or create the group if necessary.
     """
     if not value:
         return None
-    
-    print(f"🟡 Validating group: {value}, type: {type(value)}")
-    
     try:
-        # If value is a CooperativeGroup instance, return it directly
-        if isinstance(value, CooperativeGroup):
-            print(f"✅ Group is already an instance: {value.name}")
-            return value
+        group, _ = CooperativeGroup.objects.get_or_create(name=value)
+        return group
+    except Exception as e:
+        raise serializers.ValidationError(f"Error validating group: {e}")
+
         
         # If value is numeric, treat as ID
         if value.isdigit():
@@ -248,63 +223,91 @@ def validate_group(self, value):
         print(f"❌ Error validating group: {e}")
         raise serializers.ValidationError(f"Invalid group: {str(e)}")
     
-    def create(self, validated_data):
-        first_name = validated_data.pop('first_name')
-        surname = validated_data.pop('surname')
-        phone = validated_data.pop('phone')
-        address = validated_data.pop('address', '')
-        group = validated_data.pop('group', None)
-        passport_photo = validated_data.pop('passport', None)
-        
-        # Create user with unique username
-        base_username = f"{first_name.lower()}.{surname.lower()}"
-        username = base_username
-        counter = 1
-        
-        while User.objects.filter(username=username).exists():
-            username = f"{base_username}{counter}"
-            counter += 1
-        
-        email = f"{first_name.lower()}@irorunde.com"
-        
-        # Generate random password
-        random_password = get_random_string(12)
-        
-        user = User.objects.create(
-            username=username,
-            email=email,
-            first_name=first_name,
-            last_name=surname,
-            phone=phone,
-            address=address,
-            password=make_password(random_password),
-            role='member'  # ← ADDED: Set role to member
-        )
-        
-        # Create member with payment bypassed
-        member = Member.objects.create(
-            user=user,
-            group=group,
-            passport_photo=passport_photo,
-            phone=phone,
-            address=address,
-            membership_fee_paid=True,
-            status='active'
-        )
-        
-        # Generate membership number
+def create(self, validated_data):
+    print("🟡 STARTING MEMBER CREATION PROCESS")
+
+    # Extract user data
+    first_name = validated_data.pop('first_name')
+    surname = validated_data.pop('surname')
+    phone = validated_data.pop('phone')
+    address = validated_data.pop('address', '')
+    group = validated_data.pop('group', None)
+    passport_photo = validated_data.pop('passport', None)
+
+    kin_first_name = validated_data.pop('kinName', '')
+    kin_surname = validated_data.pop('kinSurname', '')
+    kin_phone = validated_data.pop('kinPhone', '')
+    kin_address = validated_data.pop('kinAddress', '')
+
+    validated_data.pop('paymentConfirmed', True)
+
+    # Create unique username
+    base_username = f"{first_name.lower()}.{surname.lower()}"
+    username = base_username
+    counter = 1
+    while User.objects.filter(username=username).exists():
+        username = f"{base_username}{counter}"
+        counter += 1
+
+    email = f"{first_name.lower()}@irorunde.com"
+    random_password = get_random_string(12)
+
+    # ✅ Create user only
+    user = User.objects.create(
+        username=username,
+        email=email,
+        first_name=first_name,
+        last_name=surname,
+        phone=phone,
+        address=address,
+        password=make_password(random_password),
+        role='member'
+    )
+    print(f"✅ Created user: {user.username} with role: {user.role}")
+
+    # ✅ Signal automatically creates the Member instance here
+    # Let's update it with extra info
+    member = getattr(user, 'member_profile', None) or Member.objects.filter(user=user).first()
+    if member:
+        member.group = group
+        member.passport_photo = passport_photo
+        member.phone = phone
+        member.address = address
+        member.membership_fee_paid = True
+        member.status = 'active'
         member.membership_number = f"IR{member.id:06d}"
         member.save()
-        
-        # Create bypassed payment record
+        print(f"✅ Updated member profile: {member.membership_number}")
+
+    # Create next of kin
+    if kin_first_name and kin_surname and member:
+        try:
+            NextOfKin.objects.create(
+                member=member,
+                first_name=kin_first_name,
+                last_name=kin_surname,
+                phone=kin_phone,
+                address=kin_address
+            )
+            print("✅ Created next of kin")
+        except Exception as e:
+            print(f"⚠️ Error creating next of kin: {e}")
+
+    # Create bypassed payment record
+    try:
         Payment.objects.create(
             member=member,
             amount=20300.00,
             payment_method='bypassed',
             is_successful=True
         )
-        
-        return member
+        print("✅ Created payment record")
+    except Exception as e:
+        print(f"⚠️ Error creating payment record: {e}")
+
+    print("🎉 MEMBER REGISTRATION COMPLETED SUCCESSFULLY")
+    return member
+
 
 class MemberLoginSerializer(serializers.Serializer):
     phone = serializers.CharField(required=True)

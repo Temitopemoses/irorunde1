@@ -366,42 +366,48 @@ class ContributionSummaryView(APIView):
 
 # Test endpoint
 class RegisterMemberView(APIView):
-    permission_classes = [permissions.AllowAny]
-    
-    def post(self, request):
+    permission_classes = []  # Allow anyone to register (public endpoint)
+
+    def post(self, request, *args, **kwargs):
+        print("🟢 Incoming registration data:", request.data)
+
         serializer = MemberRegistrationSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             try:
-                with transaction.atomic():
-                    member = serializer.save()
-                
-                return Response({
-                    'message': 'Registration successful!',
-                    'member_id': member.id,
-                    'membership_number': member.membership_number,
-                    'status': 'active',
-                }, status=status.HTTP_201_CREATED)
-                
-            except IntegrityError as e:
-                if 'UNIQUE constraint' in str(e):
-                    return Response({
-                        'error': 'This user is already registered as a member. Please check your account or contact support.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    return Response({
-                        'error': f'Registration error: {str(e)}'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                    
+                group_id = request.data.get("group")
+                if group_id:
+                    serializer.validated_data["group_id"] = group_id
+
+                member = serializer.save()
+                print(f"✅ Member created successfully: {member}")
+
+                return Response(
+                    {
+                        "message": "Member registered successfully",
+                        "member_id": member.id,
+                        "membership_number": member.membership_number,
+                        "group": str(member.group) if member.group else None,
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+
             except Exception as e:
-                return Response({
-                    'error': f'Error during registration: {str(e)}'
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({
-            'error': 'Invalid data provided',
-            'details': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+                print(f"❌ Error during save: {str(e)}")
+                return Response(
+                    {"error": f"Failed to create member: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # if serializer is invalid
+        print("❌ Serializer validation errors:", serializer.errors)
+        return Response(
+            {
+                "error": "Invalid registration data",
+                "details": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 class MemberLoginView(APIView):
     permission_classes = [permissions.AllowAny]

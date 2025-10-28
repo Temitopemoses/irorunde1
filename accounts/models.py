@@ -41,10 +41,7 @@ class User(AbstractUser):
         return f"{self.username} - {self.get_role_display()}"
     
     # === ONLY THESE 3 METHODS WERE ADDED/MODIFIED ===
-    @property
-    def is_staff(self):
-        """Group admins and superadmins can access Django admin"""
-        return self.role in ['group_admin', 'superadmin'] or self.is_superuser
+
     
     def has_perm(self, perm, obj=None):
         """Check if user has specific permission"""
