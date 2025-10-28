@@ -752,3 +752,37 @@ def generate_report(self, request):
 @ensure_csrf_cookie
 def get_csrf(request):
     return JsonResponse({"detail": "CSRF cookie set"})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_admin_members(request):
+    if request.user.role != 'group_admin' or not request.user.managed_group:
+        return Response({"error": "Access denied"}, status=403)
+    
+    group = request.user.managed_group
+    since = request.query_params.get('since')  # Optional ISO timestamp
+
+    members = Member.objects.filter(group=group).select_related('user').order_by('-registration_date')
+    
+    if since:
+        try:
+            since_dt = timezone.datetime.fromisoformat(since)
+            members = members.filter(registration_date__gt=since_dt)
+        except Exception:
+            pass  # ignore invalid format
+
+    member_data = []
+    for member in members:
+        member_data.append({
+            'id': member.id,
+            'user': {
+                'first_name': member.user.first_name,
+                'last_name': member.user.last_name,
+            },
+            'phone': member.phone,
+            'status': member.status,
+            'membership_number': member.membership_number,
+            'registration_date': member.registration_date.isoformat(),
+        })
+    
+    return Response(member_data)
