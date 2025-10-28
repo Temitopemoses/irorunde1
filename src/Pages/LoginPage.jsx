@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { getCSRFToken } from "../utils/csrf"; // Utility function to get CSRF token from cookies
 
 const LoginPage = () => {
   const [phone, setPhone] = useState("");
@@ -18,6 +19,7 @@ const LoginPage = () => {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
+          
         },
         body: JSON.stringify({ 
           phone: phone.trim(), 
@@ -54,11 +56,15 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
+      await fetch("http://127.0.0.1:8000/api/csrf/", { credentials: "include" });
       const response = await fetch("http://127.0.0.1:8000/api/accounts/login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
+          "X-CSRFToken": getCSRFToken(), // make sure you include CSRF token
+
         },
+        credentials: "include", // include cookies in the request
         body: JSON.stringify({ 
           username: username.trim(), 
           password: password.trim() 
