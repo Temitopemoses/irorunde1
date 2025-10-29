@@ -786,3 +786,37 @@ def group_admin_members(request):
         })
     
     return Response(member_data)
+    
+class GroupAdminCreateMemberView(APIView):
+    permission_classes = [permissions.IsAuthenticated]  # Only logged-in users
+    # You can create a custom permission to check role='group_admin'
+
+    def post(self, request):
+        # Ensure only group admins can create members
+        if request.user.role != 'group_admin':
+            return Response({"detail": "You do not have permission to create members."},
+                            status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = AdminMemberCreateSerializer(
+            data=request.data,
+            context={'group_admin': request.user}  # Pass the admin context
+        )
+        
+        if serializer.is_valid():
+            member = serializer.save()
+            return Response({
+                "detail": "Member created successfully",
+                "membership_number": member.membership_number,
+                "phone": member.phone
+            }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request):
+        # Only members managed by this group admin
+        if request.user.role != 'group_admin':
+            return Response({"detail": "You do not have permission."}, status=status.HTTP_403_FORBIDDEN)
+
+        members = Member.objects.filter(group=request.user.managed_group)
+        serializer = MemberSerializer(members, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

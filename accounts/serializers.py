@@ -182,106 +182,67 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
     surname = serializers.CharField(write_only=True)
     phone = serializers.CharField()
     address = serializers.CharField(required=False, allow_blank=True)
-    group = serializers.CharField(required=False, allow_blank=True)
     passport = serializers.ImageField(write_only=True, required=False, allow_null=True)
     
+    kinName = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    kinSurname = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    kinPhone = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    kinAddress = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = Member
-        fields = ('first_name', 'surname', 'phone', 'address', 'group', 'passport')
-    
-def validate_group(self, value):
-    """
-    Handle group validation - get or create the group if necessary.
-    """
-    if not value:
-        return None
-    try:
-        group, _ = CooperativeGroup.objects.get_or_create(name=value)
-        return group
-    except Exception as e:
-        raise serializers.ValidationError(f"Error validating group: {e}")
+        fields = (
+            'first_name', 'surname', 'phone', 'address', 'passport',
+            'kinName', 'kinSurname', 'kinPhone', 'kinAddress'
+        )
 
-        
-        # If value is numeric, treat as ID
-        if value.isdigit():
-            group = CooperativeGroup.objects.get(id=int(value))
-            print(f"✅ Found group by ID: {group.name}")
-            return group
-        
-        # Otherwise treat as name
-        group = CooperativeGroup.objects.get(name=value)
-        print(f"✅ Found group by name: {group.name}")
-        return group
-        
-    except CooperativeGroup.DoesNotExist:
-        # Create new group if it doesn't exist
-        print(f"🟡 Group '{value}' not found. Creating new group...")
-        group = CooperativeGroup.objects.create(name=str(value))
-        print(f"✅ Created new group: {group.name} (ID: {group.id})")
-        return group
-    except Exception as e:
-        print(f"❌ Error validating group: {e}")
-        raise serializers.ValidationError(f"Invalid group: {str(e)}")
-    
-def create(self, validated_data):
-    print("🟡 STARTING MEMBER CREATION PROCESS")
+    @db_transaction.atomic
+    def create(self, validated_data):
+        group_admin = self.context.get('group_admin')
+        if not group_admin:
+            raise serializers.ValidationError("Group admin context is required.")
+        group = group_admin.managed_group
 
-    # Extract user data
-    first_name = validated_data.pop('first_name')
-    surname = validated_data.pop('surname')
-    phone = validated_data.pop('phone')
-    address = validated_data.pop('address', '')
-    group = validated_data.pop('group', None)
-    passport_photo = validated_data.pop('passport', None)
+        first_name = validated_data.pop('first_name')
+        surname = validated_data.pop('surname')
+        phone = validated_data.pop('phone')
+        address = validated_data.pop('address', '')
+        passport = validated_data.pop('passport', None)
 
-    kin_first_name = validated_data.pop('kinName', '')
-    kin_surname = validated_data.pop('kinSurname', '')
-    kin_phone = validated_data.pop('kinPhone', '')
-    kin_address = validated_data.pop('kinAddress', '')
+        kin_first_name = validated_data.pop('kinName', '')
+        kin_surname = validated_data.pop('kinSurname', '')
+        kin_phone = validated_data.pop('kinPhone', '')
+        kin_address = validated_data.pop('kinAddress', '')
 
-    validated_data.pop('paymentConfirmed', True)
+        username = phone
+        password = surname  # Use surname as password
 
-    # Create unique username
-    base_username = f"{first_name.lower()}.{surname.lower()}"
-    username = base_username
-    counter = 1
-    while User.objects.filter(username=username).exists():
-        username = f"{base_username}{counter}"
-        counter += 1
+        # Create User with hashed password
+        user = User.objects.create(
+            username=username,
+            email=f"{first_name.lower()}@irorunde.com",
+            first_name=first_name,
+            last_name=surname,
+            phone=phone,
+            address=address,
+            password=make_password(password),
+            role='member'
+        )
 
-    email = f"{first_name.lower()}@irorunde.com"
-    random_password = get_random_string(12)
+        member = Member.objects.create(
+            user=user,
+            group=group,
+            passport_photo=passport,
+            phone=phone,
+            address=address,
+            membership_fee_paid=True,
+            status='active'
+        )
 
-    # ✅ Create user only
-    user = User.objects.create(
-        username=username,
-        email=email,
-        first_name=first_name,
-        last_name=surname,
-        phone=phone,
-        address=address,
-        password=make_password(random_password),
-        role='member'
-    )
-    print(f"✅ Created user: {user.username} with role: {user.role}")
-
-    # ✅ Signal automatically creates the Member instance here
-    # Let's update it with extra info
-    member = getattr(user, 'member_profile', None) or Member.objects.filter(user=user).first()
-    if member:
-        member.group = group
-        member.passport_photo = passport_photo
-        member.phone = phone
-        member.address = address
-        member.membership_fee_paid = True
-        member.status = 'active'
         member.membership_number = f"IR{member.id:06d}"
         member.save()
-        print(f"✅ Updated member profile: {member.membership_number}")
 
-    # Create next of kin
-    if kin_first_name and kin_surname and member:
-        try:
+        if kin_first_name and kin_surname:
             NextOfKin.objects.create(
                 member=member,
                 first_name=kin_first_name,
@@ -289,24 +250,15 @@ def create(self, validated_data):
                 phone=kin_phone,
                 address=kin_address
             )
-            print("✅ Created next of kin")
-        except Exception as e:
-            print(f"⚠️ Error creating next of kin: {e}")
 
-    # Create bypassed payment record
-    try:
         Payment.objects.create(
             member=member,
             amount=20300.00,
             payment_method='bypassed',
             is_successful=True
         )
-        print("✅ Created payment record")
-    except Exception as e:
-        print(f"⚠️ Error creating payment record: {e}")
 
-    print("🎉 MEMBER REGISTRATION COMPLETED SUCCESSFULLY")
-    return member
+        return member
 
 
 class MemberLoginSerializer(serializers.Serializer):

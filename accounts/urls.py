@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
+from .views import GroupAdminCreateMemberView
 from .views import get_csrf
 from django.http import JsonResponse
 app_name = 'accounts'
@@ -15,7 +16,7 @@ urlpatterns = [
     
     # FIX: Remove the duplicate 'api/' prefix
     path('accounts/login/', views.GroupAdminLoginView.as_view(), name='group-admin-login'),
-    
+    path('accounts/group-admin/members/', GroupAdminCreateMemberView.as_view(), name='group-admin-create-member'),
     path('accounts/groups/', views.get_groups, name='get_groups'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('logout/', views.logout_view, name='logout'),
