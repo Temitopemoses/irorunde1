@@ -168,27 +168,33 @@ const GroupAdminDashboard = () => {
     }, 3000);
   };
 
-  const handleAddMember = async (formData) => {
+const handleAddMember = async (formData) => {
   const token = localStorage.getItem('token');
-  const memberData = {
-    first_name: formData.first_name,
-    surname: formData.surname,
-    phone: formData.phone,
-    address: formData.address,
-    kinName: formData.kinName,
-    kinSurname: formData.kinSurname,
-    kinPhone: formData.kinPhone,
-    kinAddress: formData.kinAddress
-  };
+
+  // Use FormData to handle file upload
+  const memberData = new FormData();
+  memberData.append('first_name', formData.first_name);
+  memberData.append('surname', formData.surname);
+  memberData.append('phone', formData.phone);
+  memberData.append('address', formData.address || '');
+  memberData.append('kinName', formData.kinName || '');
+  memberData.append('kinSurname', formData.kinSurname || '');
+  memberData.append('kinPhone', formData.kinPhone || '');
+  memberData.append('kinAddress', formData.kinAddress || '');
+
+  // Append passport if it exists
+  if (formData.passport) {
+    memberData.append('passport', formData.passport);
+  }
 
   try {
     const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        // DO NOT set Content-Type, the browser sets it automatically with FormData
       },
-      body: JSON.stringify(memberData)
+      body: memberData
     });
 
     if (response.ok) {
@@ -205,6 +211,7 @@ const GroupAdminDashboard = () => {
     showNotification('Error adding member', 'error');
   }
 };
+
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -613,7 +620,20 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
 
         <form onSubmit={handleSubmit}>
           {step === 1 && (
+            
             <div className="space-y-4">
+
+              <div>
+              <label className="block text-sm font-medium text-gray-700">Passport Photo</label>
+              <input
+                type="file"
+                name="passport"
+                accept="image/*"
+                onChange={(e) => setFormData({ ...formData, passport: e.target.files[0] })}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700">First Name *</label>
                 <input
