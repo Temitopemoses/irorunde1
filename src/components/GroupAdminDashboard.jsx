@@ -168,52 +168,43 @@ const GroupAdminDashboard = () => {
     }, 3000);
   };
 
-  const handleAddMember = async (memberData) => {
-    try {
-      const token = localStorage.getItem('token');
-      
-      // Try different endpoints for adding members
-      const endpoints = [
-        `${API_BASE}/members/`,
-        `${API_BASE}/accounts/members/`,
-        `${API_BASE}/accounts/group-admin/members/`
-      ];
-
-      let success = false;
-      
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(memberData),
-          });
-
-          if (response.ok) {
-            const newMember = await response.json();
-            setShowModal(false);
-            await fetchDashboardData();
-            showNotification(`Member ${memberData.first_name} added successfully!`);
-            success = true;
-            break;
-          }
-        } catch (error) {
-          console.log('Failed to add member at:', endpoint, error);
-        }
-      }
-
-      if (!success) {
-        showNotification('Error: Could not add member. Please check API endpoints.', 'error');
-      }
-
-    } catch (error) {
-      console.error('Error adding member:', error);
-      showNotification('Error adding member', 'error');
-    }
+  const handleAddMember = async (formData) => {
+  const token = localStorage.getItem('token');
+  const memberData = {
+    first_name: formData.first_name,
+    surname: formData.surname,
+    phone: formData.phone,
+    address: formData.address,
+    kinName: formData.kinName,
+    kinSurname: formData.kinSurname,
+    kinPhone: formData.kinPhone,
+    kinAddress: formData.kinAddress
   };
+
+  try {
+    const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(memberData)
+    });
+
+    if (response.ok) {
+      const newMember = await response.json();
+      setShowModal(false);
+      await fetchDashboardData();
+      showNotification(`Member ${formData.first_name} added successfully!`);
+    } else {
+      const errorText = await response.text();
+      showNotification(`Failed to add member: ${errorText}`, 'error');
+    }
+  } catch (error) {
+    console.error('Error adding member:', error);
+    showNotification('Error adding member', 'error');
+  }
+};
 
   const handleLogout = () => {
     localStorage.removeItem('token');
