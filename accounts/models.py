@@ -8,6 +8,8 @@ class CooperativeGroup(models.Model):
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    flutterwave_subaccount_id = models.CharField(max_length=100, blank=True, null=True)
+
     
     def __str__(self):
         return self.name
@@ -174,15 +176,23 @@ class NextOfKin(models.Model):
 class Payment(models.Model):
     PAYMENT_METHODS = (
         ('paystack', 'Paystack'),
+        ('flutterwave', 'Flutterwave'),
         ('bank_transfer', 'Bank Transfer'),
         ('cash', 'Cash'),
         ('bypassed', 'Bypassed'),
     )
     
-    member = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='payments')
+    member = models.ForeignKey('Member', on_delete=models.CASCADE, related_name='payments')
+    group = models.ForeignKey('CooperativeGroup', on_delete=models.SET_NULL, null=True, blank=True)
+
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=20300.00)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='bypassed')
-    paystack_reference = models.CharField(max_length=100, blank=True, null=True)
+
+    # Flutterwave & Paystack fields
+    flutterwave_reference = models.CharField(max_length=100, blank=True, null=True)
+    flutterwave_transaction_id = models.CharField(max_length=100, blank=True, null=True)
+    flutterwave_subaccount_id = models.CharField(max_length=100, blank=True, null=True)
+    tx_ref = models.CharField(max_length=100, blank=True, null=True)
     is_successful = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(auto_now_add=True)
@@ -198,6 +208,7 @@ class Payment(models.Model):
     @property
     def payment_status(self):
         return "Successful" if self.is_successful else "Failed"
+
 
 class ContributionPlan(models.Model):
     PLAN_CHOICES = (

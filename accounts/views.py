@@ -5,6 +5,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
+import uuid
+import requests
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
@@ -820,3 +822,119 @@ class GroupAdminCreateMemberView(APIView):
         members = Member.objects.filter(group=request.user.managed_group)
         serializer = MemberSerializer(members, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def initialize_flutterwave_payment(request):
+    try:
+        amount = request.data.get('amount')
+        email = request.data.get('email')
+        member_id = request.data.get('member_id')
+
+        tx_ref = f"IROR-{uuid.uuid4().hex[:10]}"  # ✅ unique transaction ref
+
+        payload = {
+            "tx_ref": tx_ref,
+            "amount": amount,
+            "currency": "NGN",
+            "redirect_url": "https://your-frontend-site.com/payment-success",
+            "customer": {"email": email},
+            "customizations": {
+                "title": "Group Membership Payment",
+                "description": "Payment for group registration",
+            },
+        }
+
+        headers = {
+            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.post(
+            "https://api.flutterwave.com/v3/payments",
+            json=payload,
+            headers=headers,
+        )
+
+        res_data = response.json()
+        print("FLW RESPONSE:", response.status_code, res_data)
+
+        if response.status_code == 200 and res_data.get("status") == "success":
+            # ✅ Save payment record (optional)
+            return Response(
+                {
+                    "payment_link": res_data["data"]["link"],
+                    "tx_ref": tx_ref,  # ✅ return the ref we generated
+                },
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {"error": res_data.get("message", "Payment initialization failed")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    except Exception as e:
+        print("FLW INIT ERROR:", e)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def flutterwave_webhook(request):
+    secret_hash = settings.FLUTTERWAVE_SECRET_KEY
+    signature = request.headers.get('verif-hash')
+
+    # Verify webhook signature
+    if signature != secret_hash:
+        return Response({"error": "Invalid signature"}, status=403)
+
+    payload = json.loads(request.body)
+    tx_ref = payload.get('data', {}).get('tx_ref')
+    status = payload.get('data', {}).get('status')
+
+    try:
+        payment = Payment.objects.get(tx_ref=tx_ref)
+    except Payment.DoesNotExist:
+        return Response({"error": "Payment not found"}, status=404)
+
+    if status == 'successful':
+        payment.status = 'successful'
+        payment.is_successful = True
+        payment.save()
+
+    return Response({"message": "Webhook received"}, status=200)
+
+@api_view(['GET'])
+def verify_flutterwave_payment(request):
+    tx_ref = request.query_params.get('tx_ref')
+    if not tx_ref:
+        return Response({"error": "tx_ref is required"}, status=400)
+
+    headers = {
+        "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    url = f"https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref={tx_ref}"
+
+    response = requests.get(url, headers=headers)
+    res_data = response.json()
+    print("FLW VERIFY RESPONSE:", response.status_code, res_data)
+
+    if response.status_code == 200 and res_data.get("status") == "success":
+        flw_data = res_data.get("data", {})
+        if flw_data.get("status") == "successful":
+            # ✅ Payment verified
+            # You can mark user as paid or register them now
+            return Response(
+                {"message": "Payment verified successfully", "data": flw_data},
+                status=200,
+            )
+        else:
+            return Response(
+                {"error": "Payment not successful yet"},
+                status=400,
+            )
+
+    return Response({"error": "Verification failed"}, status=400)

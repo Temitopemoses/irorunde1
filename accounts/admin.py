@@ -165,11 +165,12 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
 # ==================== COOPERATIVE GROUP ADMIN ====================
 @admin.register(CooperativeGroup)
 class CooperativeGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'get_admin_count', 'get_member_count', 'is_active', 'created_at')
+    list_display = ('name', 'get_admin_count', 'flutterwave_subaccount_id', 'get_member_count', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
     search_fields = ('name', 'description')
     readonly_fields = ('created_at', 'get_admin_count', 'get_member_count')
     list_per_page = 20
+    list_editable = ('flutterwave_subaccount_id', 'is_active')
     
     fieldsets = (
         ('Group Information', {

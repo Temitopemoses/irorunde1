@@ -12,7 +12,9 @@ urlpatterns = [
     path('groups/', views.GroupListView.as_view(), name='group-list'),
     path('member-login/', views.MemberLoginView.as_view(), name='member-login'),
     path('csrf/', get_csrf, name='get_csrf'),
-
+    path('flutterwave/webhook/', views.flutterwave_webhook, name='flutterwave-webhook'),
+     path('flutterwave/initialize/', views.initialize_flutterwave_payment, name='initialize_flutterwave_payment'),
+    path('flutterwave/verify/', views.verify_flutterwave_payment, name='verify_flutterwave_payment'),
     
     # FIX: Remove the duplicate 'api/' prefix
     path('accounts/login/', views.GroupAdminLoginView.as_view(), name='group-admin-login'),
