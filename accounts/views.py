@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import uuid
+from datetime import datetime
 import requests
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import IsAuthenticated
@@ -197,6 +198,7 @@ class MemberDashboardView(APIView):
                     'name': f"{request.user.first_name} {request.user.last_name}",
                     'membership_number': member.membership_number,
                     'group': member.group.name if member.group else 'No Group',
+                    'group_id': member.group.id if member.group else None,  # ✅ Add this line
                     'status': member.status,
                     'passport_photo': passport_photo_url,  # Add photo URL here
                     'has_photo': bool(member.passport_photo),
@@ -824,59 +826,94 @@ class GroupAdminCreateMemberView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['POST'])
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from django.conf import settings
+from datetime import datetime
+import requests
+
+@api_view(["POST"])
+@permission_classes([AllowAny])  # Allow both guests and logged-in users
 def initialize_flutterwave_payment(request):
+    user = request.user if request.user.is_authenticated else None
+
+    amount = request.data.get("amount")
+    payment_type = request.data.get("payment_type", "membership")
+    group_id = request.data.get("group_id")
+    name = request.data.get("name") or (f"{user.first_name} {user.last_name}" if user else "Guest User")
+    email = request.data.get("email") or (user.email if user and user.email else f"guest_{datetime.now().strftime('%Y%m%d%H%M%S')}@irorunde.local")
+    phone = request.data.get("phone")
+
+    # ✅ Basic Validation
+    if not amount:
+        return Response({"error": "Amount is required"}, status=400)
     try:
-        amount = request.data.get('amount')
-        email = request.data.get('email')
-        member_id = request.data.get('member_id')
+        amount = float(amount)
+    except ValueError:
+        return Response({"error": "Invalid amount"}, status=400)
 
-        tx_ref = f"IROR-{uuid.uuid4().hex[:10]}"  # ✅ unique transaction ref
+    # ✅ Enforce minimum for contributions
+    if payment_type == "contribution" and amount < 1100:
+        return Response({"error": "Minimum contribution amount is ₦1,100"}, status=400)
 
-        payload = {
-            "tx_ref": tx_ref,
-            "amount": amount,
-            "currency": "NGN",
-            "redirect_url": "https://your-frontend-site.com/payment-success",
-            "customer": {"email": email},
-            "customizations": {
-                "title": "Group Membership Payment",
-                "description": "Payment for group registration",
-            },
-        }
+    tx_ref = f"IROR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
-        headers = {
-            "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
-            "Content-Type": "application/json",
-        }
+    payload = {
+        "tx_ref": tx_ref,
+        "amount": amount,
+        "currency": "NGN",
+        "redirect_url": f"{settings.FRONTEND_URL}/payment/verify",
+        "customer": {
+            "email": email,
+            "name": name,
+            "phonenumber": phone,
+        },
+        "meta": {
+            "payment_type": payment_type,
+            "group_id": group_id,
+            "user_id": user.id if user else None,
+            "name": name,
+            "phone": phone,
+        },
+        "customizations": {
+            "title": "Irorunde Cooperative Payment",
+            "description": (
+                "Membership registration payment"
+                if payment_type == "membership"
+                else "Contribution payment"
+            ),
+            "logo": f"{settings.FRONTEND_URL}/logo.png",
+        },
+    }
 
-        response = requests.post(
-            "https://api.flutterwave.com/v3/payments",
-            json=payload,
-            headers=headers,
-        )
+    headers = {
+        "Authorization": f"Bearer {settings.FLUTTERWAVE_SECRET_KEY}",
+        "Content-Type": "application/json",
+    }
 
-        res_data = response.json()
-        print("FLW RESPONSE:", response.status_code, res_data)
+    url = "https://api.flutterwave.com/v3/payments"
 
-        if response.status_code == 200 and res_data.get("status") == "success":
-            # ✅ Save payment record (optional)
-            return Response(
-                {
-                    "payment_link": res_data["data"]["link"],
-                    "tx_ref": tx_ref,  # ✅ return the ref we generated
-                },
-                status=status.HTTP_200_OK,
-            )
+    try:
+        res = requests.post(url, headers=headers, json=payload)
+        res_data = res.json()
+        print("FLW INIT RESPONSE:", res.status_code, res_data)
+
+        if res.status_code == 200 and res_data.get("status") == "success":
+            return Response({
+                "payment_link": res_data["data"]["link"],
+                "tx_ref": tx_ref
+            })
         else:
             return Response(
-                {"error": res_data.get("message", "Payment initialization failed")},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"error": res_data.get("message", "Failed to initialize payment")},
+                status=400,
             )
-
     except Exception as e:
-        print("FLW INIT ERROR:", e)
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        print("INIT ERROR:", e)
+        return Response({"error": str(e)}, status=500)
+
 
 
 @api_view(['POST'])
