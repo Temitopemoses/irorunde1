@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
+
 const MemberDashboard = () => {
   const [userData, setUserData] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [loadingPayment, setLoadingPayment] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -40,6 +44,57 @@ const MemberDashboard = () => {
       setLoading(false);
     }
   };
+
+const handlePayment = async () => {
+  const token = localStorage.getItem("accessToken");
+
+  if (!amount || parseFloat(amount) < 1100) {
+    alert("Minimum contribution is ₦1100.");
+    return;
+  }
+
+  console.log("userData:", userData);
+console.log("dashboardData:", dashboardData);
+
+  if (!dashboardData?.member_info?.group_id) {
+    alert("Missing user or group information.");
+    return;
+  }
+
+  try {
+    setLoadingPayment(true);
+
+    const response = await fetch("http://127.0.0.1:8000/api/flutterwave/initialize/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+
+      },
+      body: JSON.stringify({
+        amount: parseFloat(amount),
+        payment_type: "contribution",
+        group_id: dashboardData.member_info.group_id, // from backend dashboard
+
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.payment_link) {
+      window.location.href = data.payment_link;
+    } else {
+      console.error("Payment init failed:", data);
+      alert(data.error || data.message || "Unable to start payment. Please try again.");
+    }
+  } catch (error) {
+    console.error("Payment error:", error);
+    alert("Network error while initiating payment.");
+  } finally {
+    setLoadingPayment(false);
+    setShowPaymentModal(false);
+  }
+};
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -296,33 +351,71 @@ const MemberDashboard = () => {
             </div>
           )}
 
+      
           {/* Quick Actions */}
-          <div className="mt-8">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Your existing quick action buttons */}
-              <button 
-                onClick={() => alert('Contribution feature coming soon!')}
-                className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
-              >
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-amber-100 rounded-md p-2">
-                    <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="text-lg font-medium text-gray-900">Make Contribution</h4>
-                    <p className="mt-1 text-sm text-gray-500">Add funds to your account</p>
-                  </div>
-                </div>
-              </button>
+        <div className="mt-8">
+          <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
 
-              {/* Add more quick action buttons as needed */}
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            
+            {/* Make Contribution Button */}
+            <button
+              onClick={() => setShowPaymentModal(true)}
+              className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
+            >
+              <div className="flex items-center">
+                <div className="flex-shrink-0 bg-amber-100 rounded-md p-2">
+                  <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <h4 className="text-lg font-medium text-gray-900">Make Contribution</h4>
+                  <p className="mt-1 text-sm text-gray-500">Add funds to your account</p>
+                </div>
+              </div>
+            </button>
+
           </div>
         </div>
+
+        </div>
       </main>
+      {/* Flutterwave Payment Modal */}
+{showPaymentModal && (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+    <div className="bg-white rounded-lg shadow-lg w-96 p-6 relative">
+      <h2 className="text-xl font-semibold text-gray-800 mb-4">Make a Contribution</h2>
+
+      <input
+        type="number"
+        placeholder="Enter amount (₦1100 minimum)"
+        min="1100"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        className="border border-gray-300 rounded-lg w-full p-2 mb-4 focus:ring-amber-500 focus:border-amber-500"
+      />
+
+      <div className="flex justify-end space-x-3">
+        <button
+          onClick={() => setShowPaymentModal(false)}
+          className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handlePayment}
+          disabled={loadingPayment}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+        >
+          {loadingPayment ? "Processing..." : "Pay Now"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 };

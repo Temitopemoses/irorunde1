@@ -120,7 +120,10 @@ const handleFlutterPayment = async () => {
 
     const res = await fetch("http://127.0.0.1:8000/api/flutterwave/initialize/", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+      },
+
       body: JSON.stringify(payload),
     });
 
