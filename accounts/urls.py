@@ -3,7 +3,10 @@ from . import views
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import GroupAdminCreateMemberView
 from .views import get_csrf
+from .views import PaymentListView
+from .views import flutterwave_webhook
 from django.http import JsonResponse
+
 app_name = 'accounts'
 
 urlpatterns = [
@@ -15,6 +18,9 @@ urlpatterns = [
     path('flutterwave/webhook/', views.flutterwave_webhook, name='flutterwave-webhook'),
      path('flutterwave/initialize/', views.initialize_flutterwave_payment, name='initialize_flutterwave_payment'),
     path('flutterwave/verify/', views.verify_flutterwave_payment, name='verify_flutterwave_payment'),
+    path('payments/', PaymentListView.as_view(), name='payment-list'),
+    path('flutterwave/webhook/', flutterwave_webhook, name='flutterwave_webhook'),
+
     
     # FIX: Remove the duplicate 'api/' prefix
     path('accounts/login/', views.GroupAdminLoginView.as_view(), name='group-admin-login'),

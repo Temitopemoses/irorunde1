@@ -7,10 +7,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import uuid
 from datetime import datetime
+from rest_framework import generics
 import requests
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, IntegrityError
+from .serializers import PaymentSerializer
 from .models import Member, Payment, User, CooperativeGroup
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import (
@@ -18,7 +20,6 @@ from .serializers import (
     AdminMemberCreateSerializer,
     MemberSerializer,
     GroupSerializer,
-    
 )
 import os
 from django.conf import settings
@@ -465,6 +466,8 @@ class MemberLoginView(APIView):
         
         return Response(user_data, status=status.HTTP_200_OK)
 
+
+
 # Keep your other views as they are...
 class CreateMemberView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -686,6 +689,17 @@ class GroupAdminListView(APIView):
             'group_admins': serializer.data,
             'total_count': group_admins.count()
         }, status=status.HTTP_200_OK)
+
+class PaymentListView(generics.ListAPIView):
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'group_admin':
+            return Payment.objects.filter(group=user.managed_group)
+        return Payment.objects.none()
+
 
 class GroupAdminDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -1042,3 +1056,20 @@ def verify_flutterwave_payment(request):
             )
 
     return Response({"error": "Verification failed"}, status=400)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def payment_history(request):
+    payments = Payment.objects.filter(member__user=request.user).order_by("-created_at")
+    data = [
+        {
+            "date": p.created_at.strftime("%Y-%m-%d"),
+            "amount": float(p.amount),
+            "method": p.payment_method,
+            "status": "Successful" if p.is_successful else "Failed",
+            "tx_ref": p.tx_ref,
+        }
+        for p in payments
+    ]
+    return Response(data)
+
