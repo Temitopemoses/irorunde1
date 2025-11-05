@@ -1,0 +1,22 @@
+# Python
+*.pyc
+__pycache__/
+.env
+
+# Django
+/staticfiles/
+media/
+
+# React
+node_modules/
+build/
+.env
+
+# OS/System
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
