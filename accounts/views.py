@@ -916,31 +916,85 @@ def initialize_flutterwave_payment(request):
 
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Member, Payment, Transaction, MemberContribution, ContributionPlan
+from django.utils import timezone
+from decimal import Decimal
+import json
+
+@csrf_exempt
+@api_view(["POST"])
 def flutterwave_webhook(request):
-    secret_hash = settings.FLUTTERWAVE_SECRET_KEY
-    signature = request.headers.get('verif-hash')
-
-    # Verify webhook signature
-    if signature != secret_hash:
-        return Response({"error": "Invalid signature"}, status=403)
-
-    payload = json.loads(request.body)
-    tx_ref = payload.get('data', {}).get('tx_ref')
-    status = payload.get('data', {}).get('status')
-
     try:
-        payment = Payment.objects.get(tx_ref=tx_ref)
-    except Payment.DoesNotExist:
-        return Response({"error": "Payment not found"}, status=404)
+        payload = json.loads(request.body.decode("utf-8"))
+        print("FLW WEBHOOK PAYLOAD:", payload)
 
-    if status == 'successful':
-        payment.status = 'successful'
-        payment.is_successful = True
-        payment.save()
+        # Optional security check (only if you set a secret hash in your Flutterwave dashboard)
+        secret_hash = getattr(settings, "FLUTTERWAVE_SECRET_HASH", None)
+        signature = request.headers.get("verif-hash")
+        if secret_hash and signature != secret_hash:
+            return Response({"error": "Invalid signature"}, status=403)
 
-    return Response({"message": "Webhook received"}, status=200)
+        data = payload.get("data", {})
+        tx_ref = data.get("tx_ref")
+        status = data.get("status")
+        amount = Decimal(data.get("amount", "0"))
+        email = data.get("customer", {}).get("email")
+
+        # ✅ Proceed only if transaction is successful
+        if status == "successful" and email:
+            member = Member.objects.filter(user__email=email).first()
+            if not member:
+                return Response({"error": "Member not found"}, status=404)
+
+            # Prevent duplicate recording
+            if Payment.objects.filter(tx_ref=tx_ref).exists():
+                return Response({"message": "Already processed"}, status=200)
+
+            # ✅ Create Payment record
+            payment = Payment.objects.create(
+                member=member,
+                group=member.group,
+                amount=amount,
+                payment_method="flutterwave",
+                flutterwave_reference=data.get("flw_ref"),
+                flutterwave_transaction_id=str(data.get("id")),
+                tx_ref=tx_ref,
+                is_successful=True,
+            )
+
+            # ✅ Create Transaction record
+            transaction = Transaction.objects.create(
+                member=member,
+                transaction_type="contribution",
+                amount=amount,
+                description="Member contribution via Flutterwave",
+                status="completed",
+            )
+
+            # ✅ Link MemberContribution (if this is a contribution)
+            plan = ContributionPlan.objects.filter(is_active=True).first()  # Use default plan
+            if plan:
+                MemberContribution.objects.create(
+                    member=member,
+                    plan=plan,
+                    amount_paid=amount,
+                    week_number=timezone.now().isocalendar()[1],
+                    month=timezone.now().month,
+                    year=timezone.now().year,
+                    transaction=transaction,
+                )
+
+            return Response({"status": "success"}, status=200)
+
+        return Response({"error": "Unsuccessful or invalid data"}, status=400)
+
+    except Exception as e:
+        print("FLW WEBHOOK ERROR:", str(e))
+        return Response({"error": str(e)}, status=500)
+
 
 @api_view(['GET'])
 def verify_flutterwave_payment(request):
