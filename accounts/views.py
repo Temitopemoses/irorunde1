@@ -929,53 +929,66 @@ import json
 def flutterwave_webhook(request):
     try:
         payload = json.loads(request.body.decode("utf-8"))
-        print("FLW WEBHOOK PAYLOAD:", payload)
+        print("🌍 FLW WEBHOOK PAYLOAD:", payload)
 
-        # Optional security check (only if you set a secret hash in your Flutterwave dashboard)
+        # ✅ Step 1: Verify Flutterwave signature (optional but recommended)
         secret_hash = getattr(settings, "FLUTTERWAVE_SECRET_HASH", None)
         signature = request.headers.get("verif-hash")
         if secret_hash and signature != secret_hash:
             return Response({"error": "Invalid signature"}, status=403)
 
+        event = payload.get("event")
         data = payload.get("data", {})
+
+        # ✅ Only process completed payments
+        if event != "charge.completed" or data.get("status") != "successful":
+            return Response({"message": "Event ignored"}, status=200)
+
         tx_ref = data.get("tx_ref")
-        status = data.get("status")
         amount = Decimal(data.get("amount", "0"))
         email = data.get("customer", {}).get("email")
+        payment_type = data.get("meta", {}).get("payment_type", "contribution")
+        group_id = data.get("meta", {}).get("group_id")
 
-        # ✅ Proceed only if transaction is successful
-        if status == "successful" and email:
-            member = Member.objects.filter(user__email=email).first()
-            if not member:
-                return Response({"error": "Member not found"}, status=404)
+        if not email:
+            return Response({"error": "Missing email"}, status=400)
 
-            # Prevent duplicate recording
-            if Payment.objects.filter(tx_ref=tx_ref).exists():
-                return Response({"message": "Already processed"}, status=200)
+        # ✅ Find member
+        member = Member.objects.filter(user__email=email).first()
+        if not member:
+            return Response({"error": "Member not found"}, status=404)
 
-            # ✅ Create Payment record
-            payment = Payment.objects.create(
-                member=member,
-                group=member.group,
-                amount=amount,
-                payment_method="flutterwave",
-                flutterwave_reference=data.get("flw_ref"),
-                flutterwave_transaction_id=str(data.get("id")),
-                tx_ref=tx_ref,
-                is_successful=True,
-            )
+        # ✅ Prevent duplicate
+        if Payment.objects.filter(tx_ref=tx_ref).exists():
+            print(f"⚠️ Payment {tx_ref} already recorded.")
+            return Response({"message": "Already processed"}, status=200)
 
-            # ✅ Create Transaction record
-            transaction = Transaction.objects.create(
-                member=member,
-                transaction_type="contribution",
-                amount=amount,
-                description="Member contribution via Flutterwave",
-                status="completed",
-            )
+        # ✅ Create Payment record
+        group = member.group if not group_id else CooperativeGroup.objects.filter(id=group_id).first()
 
-            # ✅ Link MemberContribution (if this is a contribution)
-            plan = ContributionPlan.objects.filter(is_active=True).first()  # Use default plan
+        payment = Payment.objects.create(
+            member=member,
+            group=group,
+            amount=amount,
+            payment_method="flutterwave",
+            flutterwave_reference=data.get("flw_ref"),
+            flutterwave_transaction_id=str(data.get("id")),
+            tx_ref=tx_ref,
+            is_successful=True,
+        )
+
+        # ✅ Create Transaction
+        transaction = Transaction.objects.create(
+            member=member,
+            transaction_type=payment_type,
+            amount=amount,
+            description=f"{payment_type.capitalize()} via Flutterwave",
+            status="completed",
+        )
+
+        # ✅ Record Member Contribution if contribution type
+        if payment_type == "contribution":
+            plan = ContributionPlan.objects.filter(is_active=True).first()
             if plan:
                 MemberContribution.objects.create(
                     member=member,
@@ -987,12 +1000,12 @@ def flutterwave_webhook(request):
                     transaction=transaction,
                 )
 
-            return Response({"status": "success"}, status=200)
+        print(f"✅ Payment verified & recorded for {email} (₦{amount})")
 
-        return Response({"error": "Unsuccessful or invalid data"}, status=400)
+        return Response({"status": "success"}, status=200)
 
     except Exception as e:
-        print("FLW WEBHOOK ERROR:", str(e))
+        print("❌ FLW WEBHOOK ERROR:", str(e))
         return Response({"error": str(e)}, status=500)
 
 
