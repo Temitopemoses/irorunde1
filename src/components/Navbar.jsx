@@ -11,7 +11,7 @@ const Navbar = () => {
         {/* Logo */}
         <Link to="/" className="flex items-center space-x-2">
           <img
-            src="src/img/logo.png"
+            src="src/assets/logo.png"
             alt="Irorunde Logo"
             className="w-10 h-10 rounded-full"
           />

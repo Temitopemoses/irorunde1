@@ -153,9 +153,9 @@ const Home = () => {
   <h2 className="text-3xl font-bold text-amber-600 mb-8">Meet Our Team</h2>
   <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
     {[
-      { name: "Ayilara Abimbola Fatimoh", role: "President", img: "src/img/president.jpg" },
-      { name: "Babalola Olufunso Esther", role: "Secretary", img: "src/img/secretary.jpg" },
-      { name: "Ajimotokin Mojisola", role: "Irorunde 4 President", img: "src/img/Ajimotokin.jpg" },
+      { name: "Ayilara Abimbola Fatimoh", role: "President", img: "src/assets/president.jpg" },
+      { name: "Babalola Olufunso Esther", role: "Secretary", img: "src/assets/secretary.jpg" },
+      { name: "Ajimotokin Mojisola", role: "Irorunde 4 President", img: "src/assets/Ajimotokin.jpg" },
     ].map((t, i) => (
       <div key={i} className="p-6 bg-white shadow-lg rounded-xl">
         <img
