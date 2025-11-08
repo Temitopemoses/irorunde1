@@ -149,22 +149,26 @@ const Home = () => {
       </section>
 
       {/* Team */}
-      <section id="team" className="py-16 bg-amber-50 px-6 text-center">
-        <h2 className="text-3xl font-bold text-amber-600 mb-8">Meet Our Team</h2>
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {[
-            { name: "Temitope Moses", role: "President" },
-            { name: "Aisha Bello", role: "Secretary" },
-            { name: "John Okoro", role: "Treasurer" },
-          ].map((t, i) => (
-            <div key={i} className="p-6 bg-white shadow-lg rounded-xl">
-              <div className="w-20 h-20 mx-auto bg-amber-100 rounded-full mb-4"></div>
-              <h3 className="font-semibold text-lg text-amber-600">{t.name}</h3>
-              <p className="text-gray-600">{t.role}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+<section id="team" className="py-16 bg-amber-50 px-6 text-center">
+  <h2 className="text-3xl font-bold text-amber-600 mb-8">Meet Our Team</h2>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+    {[
+      { name: "Ayilara Abimbola Fatimoh", role: "President", img: "src/img/president.jpg" },
+      { name: "Babalola Olufunso Esther", role: "Secretary", img: "src/img/secretary.jpg" },
+      { name: "Ajimotokin Mojisola", role: "Irorunde 4 President", img: "src/img/Ajimotokin.jpg" },
+    ].map((t, i) => (
+      <div key={i} className="p-6 bg-white shadow-lg rounded-xl">
+        <img
+          src={t.img}
+          alt={t.name}
+          className="w-32 h-32 md:w-40 md:h-40 mx-auto rounded-full object-cover mb-4"
+        />
+        <h3 className="font-semibold text-lg text-amber-600">{t.name}</h3>
+        <p className="text-gray-600">{t.role}</p>
+      </div>
+    ))}
+  </div>
+</section>
 
       {/* Contact */}
       <section id="contact" className="py-16 bg-white px-6 text-center">
