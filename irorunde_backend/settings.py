@@ -20,7 +20,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret-key")
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 # Allowed hosts
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*" "irorunde1-production.up.railway.app").split(",")
+ALLOWED_HOSTS = os.environ.get("irorunde1-production.up.railway.app", "127.0.0.1", "localhost").split(",")
 
 # Application definition
 INSTALLED_APPS = [
