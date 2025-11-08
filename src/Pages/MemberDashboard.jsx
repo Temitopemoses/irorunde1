@@ -9,6 +9,8 @@ const MemberDashboard = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [amount, setAmount] = useState("");
   const [loadingPayment, setLoadingPayment] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+
 
   useEffect(() => {
     fetchDashboardData();
@@ -44,6 +46,26 @@ const MemberDashboard = () => {
       setLoading(false);
     }
   };
+  const fetchPaymentHistory = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const response = await fetch("http://127.0.0.1:8000/api/api/payment-history/", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPaymentHistory(data);
+      } else {
+        console.error("Failed to load payment history");
+      }
+    } catch (err) {
+      console.error("Payment history fetch error:", err);
+    }
+  };
+
 
 const handlePayment = async () => {
   const token = localStorage.getItem("accessToken");
@@ -348,6 +370,65 @@ console.log("dashboardData:", dashboardData);
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+        {/* Payment History */}
+          {paymentHistory.length > 0 ? (
+            <div className="mt-10">
+              <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                Payment History
+              </h3>
+              <div className="overflow-x-auto bg-white shadow rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount (₦)
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paymentHistory.map((payment) => (
+                      <tr key={payment.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                          {new Date(payment.date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm capitalize">
+                          {payment.payment_type}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          ₦{payment.amount.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              payment.status === "successful"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-yellow-100 text-yellow-800"
+                            }`}
+                          >
+                            {payment.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-10 text-gray-500 text-sm italic">
+              No payments found yet.
             </div>
           )}
 

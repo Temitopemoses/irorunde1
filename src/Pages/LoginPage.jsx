@@ -250,7 +250,7 @@ const LoginPage = () => {
             <a href="/join" className="text-sm text-amber-600 hover:text-amber-700">
               Join Us
             </a>
-            <a href="/about" className="text-sm text-amber-600 hover:text-amber-700">
+            <a href="/" className="text-sm text-amber-600 hover:text-amber-700">
               About
             </a>
           </div>

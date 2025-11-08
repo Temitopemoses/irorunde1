@@ -6,16 +6,17 @@ const GroupAdminDashboard = () => {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState({});
   const [recentMembers, setRecentMembers] = useState([]);
+  const [contributions, setContributions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [showModal, setShowModal] = useState(false);
-  const [notification, setNotification] = useState({ show: false, message: '' });
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
   const API_BASE = 'http://127.0.0.1:8000/api';
 
+  // Combined useEffect for login check and initial fetch
   useEffect(() => {
-    // Check if user is logged in and is a group admin
     const userData = localStorage.getItem('user');
     const token = localStorage.getItem('token');
 
@@ -32,6 +33,7 @@ const GroupAdminDashboard = () => {
       }
       setUser(userObj);
       fetchDashboardData();
+      fetchContributions();
     } catch (error) {
       console.error('Error parsing user data:', error);
       navigate('/login');
@@ -41,59 +43,39 @@ const GroupAdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const token = localStorage.getItem('token');
-      
-      // Since we're getting 404 errors, let's try to get members directly
-      // and calculate stats from the members data
-      const membersResponse = await fetch(`${API_BASE}/members/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      const membersResponse = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
 
-      console.log('Members response status:', membersResponse.status);
-
+      let membersData = [];
       if (membersResponse.ok) {
-        const membersData = await membersResponse.json();
-        console.log('Members data received:', membersData);
-        
-        // Transform the members data to match our format
-        const formattedMembers = Array.isArray(membersData) ? membersData : 
-                                membersData.results ? membersData.results : 
-                                membersData.members ? membersData.members : [];
-        
-        console.log('Formatted members:', formattedMembers);
-        
-        const finalMembers = formattedMembers.map(member => ({
-          id: member.id,
-          first_name: member.user?.first_name || member.first_name,
-          last_name: member.user?.last_name || member.last_name || member.surname,
-          phone: member.phone,
-          join_date: member.registration_date || member.join_date,
-          status: member.status || 'active',
-          membership_number: member.membership_number,
-          email: member.user?.email || member.email,
-          address: member.address
-        }));
-
-        setRecentMembers(finalMembers);
-        
-        // Calculate stats from members data
-        const total_members = finalMembers.length;
-        const active_members = finalMembers.filter(m => m.status === 'active').length;
-        
-        setStats({
-          total_members: total_members,
-          active_members: active_members,
-          total_contributions: 0, // We'll need to calculate this separately
-          monthly_contributions: 0 // We'll need to calculate this separately
-        });
+        membersData = await membersResponse.json();
       } else {
-        console.error('Failed to fetch members:', await membersResponse.text());
-        // If members endpoint fails, try the old endpoint
-        await tryAlternativeEndpoints(token);
+        console.warn('Failed to fetch /members/, trying alternative endpoints...');
+        membersData = await tryAlternativeEndpoints(token);
       }
 
+      const formattedMembers = (Array.isArray(membersData) ? membersData :
+        membersData.results ? membersData.results :
+        membersData.members ? membersData.members : []
+      ).map(member => ({
+        id: member.id,
+        first_name: member.user?.first_name || member.first_name,
+        last_name: member.user?.last_name || member.last_name || member.surname,
+        phone: member.phone,
+        join_date: member.registration_date || member.join_date,
+        status: member.status || 'active',
+        membership_number: member.membership_number,
+        email: member.user?.email || member.email,
+        address: member.address
+      }));
+
+      setRecentMembers(formattedMembers);
+      setStats(prev => ({
+        ...prev,
+        total_members: formattedMembers.length,
+        active_members: formattedMembers.filter(m => m.status === 'active').length
+      }));
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       showNotification('Error loading dashboard data', 'error');
@@ -102,166 +84,104 @@ const GroupAdminDashboard = () => {
     }
   };
 
-  const tryAlternativeEndpoints = async (token) => {
-    // Try different endpoint variations that might work
-    const endpoints = [
-      `${API_BASE}/accounts/members/`,
-      `${API_BASE}/accounts/group-admin/members/`,
-      `${API_BASE}/members/all/`,
-      `${API_BASE}/members/list/`
-    ];
-
-    for (const endpoint of endpoints) {
-      try {
-        console.log('Trying endpoint:', endpoint);
-        const response = await fetch(endpoint, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Success with endpoint:', endpoint, data);
-          
-          const formattedMembers = Array.isArray(data) ? data : 
-                                  data.results ? data.results : 
-                                  data.members ? data.members : [];
-          
-          const finalMembers = formattedMembers.map(member => ({
-            id: member.id,
-            first_name: member.user?.first_name || member.first_name,
-            last_name: member.user?.last_name || member.last_name || member.surname,
-            phone: member.phone,
-            join_date: member.registration_date || member.join_date,
-            status: member.status || 'active',
-            membership_number: member.membership_number,
-            email: member.user?.email || member.email,
-            address: member.address
-          }));
-
-          setRecentMembers(finalMembers);
-          
-          const total_members = finalMembers.length;
-          const active_members = finalMembers.filter(m => m.status === 'active').length;
-          
-          setStats({
-            total_members: total_members,
-            active_members: active_members,
-            total_contributions: 0,
-            monthly_contributions: 0
-          });
-          
-          break;
-        }
-      } catch (error) {
-        console.log('Failed endpoint:', endpoint, error);
-      }
-    }
-  };
-
-  const showNotification = (message, type = 'success') => {
-    setNotification({ show: true, message, type });
-    setTimeout(() => {
-      setNotification({ show: false, message: '' });
-    }, 3000);
-  };
-
-const handleAddMember = async (formData) => {
+const fetchContributions = async () => {
   const token = localStorage.getItem('token');
-
-  // Use FormData to handle file upload
-  const memberData = new FormData();
-  memberData.append('first_name', formData.first_name);
-  memberData.append('surname', formData.surname);
-  memberData.append('phone', formData.phone);
-  memberData.append('address', formData.address || '');
-  memberData.append('kinName', formData.kinName || '');
-  memberData.append('kinSurname', formData.kinSurname || '');
-  memberData.append('kinPhone', formData.kinPhone || '');
-  memberData.append('kinAddress', formData.kinAddress || '');
-
-  // Append passport if it exists
-  if (formData.passport) {
-    memberData.append('passport', formData.passport);
-  }
-
   try {
-    const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        // DO NOT set Content-Type, the browser sets it automatically with FormData
-      },
-      body: memberData
+    const response = await fetch(`${API_BASE}/api/payment-history/`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
 
     if (response.ok) {
-      const newMember = await response.json();
-      setShowModal(false);
-      await fetchDashboardData();
-      showNotification(`Member ${formData.first_name} added successfully!`);
+      const data = await response.json();
+      const formatted = data.map(c => ({
+        id: c.id,
+        member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim(),
+        membership_number: c.member?.membership_number,
+        amount: c.amount,
+        date: c.date
+      }));
+      setContributions(formatted);
+
+      const totalContributions = formatted.reduce((sum, c) => sum + c.amount, 0);
+      const monthlyContributions = formatted
+        .filter(c => new Date(c.date).getMonth() === new Date().getMonth())
+        .reduce((sum, c) => sum + c.amount, 0);
+
+      setStats(prev => ({
+        ...prev,
+        total_contributions: totalContributions,
+        monthly_contributions: monthlyContributions
+      }));
     } else {
-      const errorText = await response.text();
-      showNotification(`Failed to add member: ${errorText}`, 'error');
+      console.error('Failed to fetch contributions');
     }
   } catch (error) {
-    console.error('Error adding member:', error);
-    showNotification('Error adding member', 'error');
+    console.error('Error fetching contributions:', error);
   }
 };
 
 
+  const showNotification = (message, type = 'success') => {
+    setNotification({ show: true, message, type });
+    setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
+  };
+
+  const handleAddMember = async (formData) => {
+    const token = localStorage.getItem('token');
+    const memberData = new FormData();
+    Object.keys(formData).forEach(key => { if (formData[key]) memberData.append(key, formData[key]); });
+
+    try {
+      const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: memberData
+      });
+
+      if (response.ok) {
+        await fetchDashboardData();
+        showNotification(`Member ${formData.first_name} added successfully!`);
+        setShowModal(false);
+      } else {
+        const errorText = await response.text();
+        showNotification(`Failed to add member: ${errorText}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error adding member:', error);
+      showNotification('Error adding member', 'error');
+    }
+  };
+
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    localStorage.removeItem('userData');
+    ['token', 'refreshToken', 'user', 'userData'].forEach(key => localStorage.removeItem(key));
     navigate('/login');
   };
 
-  const handleViewAllMembers = () => {
-    setActiveTab('members');
-  };
+  const handleViewAllMembers = () => setActiveTab('members');
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading dashboard...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-amber-600">
-                Irorunde Cooperative
-              </h1>
-              <span className="ml-4 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
-                Group Admin Dashboard
-              </span>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">
-                Welcome, {user?.first_name} {user?.last_name}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-              >
-                Logout
-              </button>
-            </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold text-amber-600">Irorunde Cooperative</h1>
+            <span className="ml-4 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
+              Group Admin Dashboard
+            </span>
+          </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-gray-700">Welcome, {user?.first_name} {user?.last_name}</span>
+            <button onClick={handleLogout} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Logout</button>
           </div>
         </div>
       </header>
@@ -270,22 +190,15 @@ const handleAddMember = async (formData) => {
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
-            {[
-              { id: 'overview', name: 'Overview' },
-              { id: 'members', name: 'Members' },
-              { id: 'contributions', name: 'Contributions' },
-              { id: 'reports', name: 'Reports' },
-            ].map((tab) => (
+            {['overview', 'members', 'contributions', 'reports'].map(tab => (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={tab}
+                onClick={() => setActiveTab(tab)}
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-amber-500 text-amber-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  activeTab === tab ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab.name}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </nav>
@@ -308,29 +221,18 @@ const handleAddMember = async (formData) => {
             onRefresh={fetchDashboardData}
           />
         )}
-        {activeTab === 'contributions' && <ContributionsTab />}
+        {activeTab === 'contributions' && (
+          <ContributionsTab contributions={contributions} />
+        )}
         {activeTab === 'reports' && <ReportsTab />}
       </main>
 
-      {/* Add Member Modal */}
-      {showModal && (
-        <AddMemberModal
-          onClose={() => setShowModal(false)}
-          onAddMember={handleAddMember}
-          user={user}
-        />
-      )}
-
-      {/* Notification */}
-      {notification.show && (
-        <Notification 
-          message={notification.message} 
-          type={notification.type}
-        />
-      )}
+      {showModal && <AddMemberModal onClose={() => setShowModal(false)} onAddMember={handleAddMember} user={user} />}
+      {notification.show && <Notification message={notification.message} type={notification.type} />}
     </div>
   );
 };
+
 
 // Overview Tab Component - Keep exactly as before
 const OverviewTab = ({ stats, recentMembers, onAddMember, onViewMembers }) => {
@@ -526,7 +428,7 @@ const MembersTab = ({ members, onRefresh }) => {
 };
 
 // Contributions Tab Component - Keep exactly as before
-const ContributionsTab = () => {
+const ContributionsTab = ({ contributions }) => {
   return (
     <div className="px-4 py-6">
       <div className="bg-white shadow rounded-lg">
@@ -536,9 +438,40 @@ const ContributionsTab = () => {
           </h3>
         </div>
         <div className="px-4 py-5 sm:p-6">
-          <p className="text-gray-500 text-center py-4">
-            Contributions management feature coming soon...
-          </p>
+          {contributions.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Member</th>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Membership No.</th>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {contributions.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {c.member_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {c.membership_number}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ₦{c.amount.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(c.date).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-4">No contributions found</p>
+          )}
         </div>
       </div>
     </div>
