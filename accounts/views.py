@@ -1,5 +1,6 @@
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
+from django.db.models import Sum, Count
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
@@ -32,6 +33,9 @@ from django.contrib.auth import authenticate
 from rest_framework.decorators import action
 
 
+
+
+
 # =============================
 # GROUP ADMIN DASHBOARD VIEWS
 # =============================
@@ -57,32 +61,6 @@ def group_admin_stats(request):
         'totalPayments': total_payments,
         'pendingPayments': pending_payments,
     })
-
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def group_admin_members(request):
-    """Get members for group admin dashboard"""
-    if request.user.role != 'group_admin' or not request.user.managed_group:
-        return Response({"error": "Access denied"}, status=403)
-    
-    group = request.user.managed_group
-    members = Member.objects.filter(group=group).select_related('user').order_by('-registration_date')
-    
-    member_data = []
-    for member in members:
-        member_data.append({
-            'id': member.id,
-            'user': {
-                'first_name': member.user.first_name,
-                'last_name': member.user.last_name,
-            },
-            'phone': member.phone,
-            'status': member.status,
-            'membership_number': member.membership_number,
-            'registration_date': member.registration_date,
-        })
-    
-    return Response(member_data)
 
 
 class GroupAdminLoginView(APIView):
@@ -929,15 +907,6 @@ def initialize_flutterwave_payment(request):
         return Response({"error": str(e)}, status=500)
 
 
-
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Member, Payment, Transaction, MemberContribution, ContributionPlan
-from django.utils import timezone
-from decimal import Decimal
-import json
-
 @csrf_exempt
 @api_view(["POST"])
 def flutterwave_webhook(request):
@@ -1057,19 +1026,77 @@ def verify_flutterwave_payment(request):
 
     return Response({"error": "Verification failed"}, status=400)
 
-@api_view(["GET"])
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def payment_history(request):
-    payments = Payment.objects.filter(member__user=request.user).order_by("-created_at")
-    data = [
-        {
-            "date": p.created_at.strftime("%Y-%m-%d"),
-            "amount": float(p.amount),
-            "method": p.payment_method,
-            "status": "Successful" if p.is_successful else "Failed",
-            "tx_ref": p.tx_ref,
-        }
-        for p in payments
-    ]
-    return Response(data)
+    user = request.user
 
+    try:
+        # ✅ If the user is a member, show only their payments
+        if hasattr(user, 'member'):
+            payments = Payment.objects.filter(member=user.member)
+        # ✅ If the user is a group admin, show all payments for their group
+        elif hasattr(user, 'group_admin'):
+            group_members = GroupMember.objects.filter(group=user.group_admin.group)
+            payments = Payment.objects.filter(member__in=group_members)
+        # ✅ Superadmins see all payments
+        elif user.is_superuser:
+            payments = Payment.objects.all()
+        else:
+            payments = Payment.objects.none()
+
+        serializer = PaymentSerializer(payments, many=True)
+        return JsonResponse(serializer.data, safe=False)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_report(request, group_id):
+    try:
+        group = CooperativeGroup.objects.get(id=group_id)
+        
+        total_members = group.member_set.count()
+        total_contributions = Payment.objects.filter(group=group, is_successful=True).aggregate(total=Sum('amount'))['total'] or 0
+        total_payments = Payment.objects.filter(group=group, is_successful=True).count()
+        
+        # Top contributors
+        top_contributors = (
+            Payment.objects.filter(group=group, is_successful=True)
+            .values('member__user__full_name')
+            .annotate(total_paid=Sum('amount'))
+            .order_by('-total_paid')[:3]
+        )
+        
+        # Recent payments
+        recent_payments = (
+            Payment.objects.filter(group=group, is_successful=True)
+            .select_related('member__user')
+            .order_by('-created_at')[:5]
+            .values('member__user__full_name', 'amount', 'created_at')
+        )
+
+        # Average contribution
+        avg_contribution = (
+            Payment.objects.filter(group=group, is_successful=True)
+            .aggregate(avg=Sum('amount') / total_members if total_members > 0 else 0)
+        )
+
+        data = {
+            "group": group.name,
+            "total_members": total_members,
+            "total_contributions": total_contributions,
+            "total_payments": total_payments,
+            "average_contribution": avg_contribution["avg"] or 0,
+            "top_contributors": list(top_contributors),
+            "recent_payments": list(recent_payments),
+        }
+        return Response(data)
+    except CooperativeGroup.DoesNotExist:
+        return Response({"error": "Group not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

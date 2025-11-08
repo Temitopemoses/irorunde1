@@ -7,6 +7,7 @@ from .views import PaymentListView
 from .views import flutterwave_webhook
 from django.http import JsonResponse
 
+
 app_name = 'accounts'
 
 urlpatterns = [
@@ -20,6 +21,11 @@ urlpatterns = [
     path('flutterwave/verify/', views.verify_flutterwave_payment, name='verify_flutterwave_payment'),
     path('payments/', PaymentListView.as_view(), name='payment-list'),
     path('flutterwave/webhook/', flutterwave_webhook, name='flutterwave_webhook'),
+    path('api/payment-history/', views.payment_history, name='payment_history'),
+
+
+
+
 
     
     # FIX: Remove the duplicate 'api/' prefix
