@@ -117,6 +117,8 @@ USE_TZ = True
 # Static and Media files
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -138,7 +140,7 @@ SIMPLE_JWT = {
 }
 
 # CORS
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.environ.get("FRONTEND_URL",)
 CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
 CORS_ALLOW_CREDENTIALS = True
 
