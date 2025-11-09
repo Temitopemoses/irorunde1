@@ -24,6 +24,8 @@ ALLOWED_HOSTS = [
     "irorunde1-production.up.railway.app",  # Railway backend
     "127.0.0.1",
     "localhost",
+    "irorundekajola.com",
+    "www.irorundekajola.com",
 ]
 
 # Frontend URL (from .env or fallback)
@@ -33,6 +35,7 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://irorunde-frontend.vercel.
 CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,
     "http://localhost:3000",
+    "https://www.irorundekajola.com"
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -40,7 +43,9 @@ CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [
     "https://irorunde1-production.up.railway.app",
     FRONTEND_URL,
-    "http://localhost:3000",
+    "http://localhost:3000"
+    "https://irorundekajola.com",
+    "https://www.irorundekajola.com"
 ]
 
 # ------------------------------------------------------------------

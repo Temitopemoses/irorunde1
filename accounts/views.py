@@ -876,7 +876,7 @@ def initialize_flutterwave_payment(request):
                 if payment_type == "membership"
                 else "Contribution payment"
             ),
-            "logo": f"{settings.FRONTEND_URL}/src/img/logo.png",
+            "logo": f"{settings.FRONTEND_URL}/src/assets/logo.png",
         },
     }
 
