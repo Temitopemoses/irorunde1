@@ -25,7 +25,7 @@ const MemberDashboard = () => {
         setUserData(JSON.parse(storedUserData));
       }
 
-      const response = await fetch('https://irorunde1-production.up.railway.app/dashboard/', {
+      const response = await fetch('https://irorunde1-production.up.railway.app/api/dashboard/', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -49,7 +49,7 @@ const MemberDashboard = () => {
   const fetchPaymentHistory = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/payment-history/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/api/payment-history/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -86,7 +86,7 @@ console.log("dashboardData:", dashboardData);
   try {
     setLoadingPayment(true);
 
-    const response = await fetch("https://irorunde1-production.up.railway.app/flutterwave/initialize/", {
+    const response = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/initialize/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

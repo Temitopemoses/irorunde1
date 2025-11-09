@@ -8,7 +8,7 @@ const UserList = ({ type }) => { // type = 'member' or 'admin'
 
   const fetchList = async () => {
     try {
-      const url = `https://irorunde1-production.up.railway.app/accounts/${type === 'admin' ? 'admin/list/' : 'member/list/'}`;
+      const url = `https://irorunde1-production.up.railway.app/api/accounts/${type === 'admin' ? 'admin/list/' : 'member/list/'}`;
       const res = await axios.get(url, { headers: authHeaders() });
       setUsers(res.data);
     } catch (err) { console.error(err); }
@@ -17,7 +17,7 @@ const UserList = ({ type }) => { // type = 'member' or 'admin'
   const deleteUser = async (id) => {
     if(!window.confirm('Delete?')) return;
     try {
-      const url = `https://irorunde1-production.up.railway.app/accounts/${type === 'admin' ? 'admin/delete/' : 'member/delete/'}${id}/`;
+      const url = `https://irorunde1-production.up.railway.app/api/accounts/${type === 'admin' ? 'admin/delete/' : 'member/delete/'}${id}/`;
       await axios.delete(url, { headers: authHeaders() });
       setUsers(users.filter(u => u.id !== id));
     } catch (err) { console.error(err); }

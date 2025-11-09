@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import { FlutterWaveButton } from "flutterwave-react-v3"; // optional - we do redirect method
 
+
+
 const Join = ({ userRole = "member", token = null }) => {
   const [step, setStep] = useState(1);
   const [groups, setGroups] = useState([]);
@@ -27,7 +29,7 @@ const Join = ({ userRole = "member", token = null }) => {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const response = await fetch("https://irorunde1-production.up.railway.app/accounts/groups/");
+        const response = await fetch("https://irorunde1-production.up.railway.app/api/accounts/groups/");
         if (response.ok) {
           const data = await response.json();
           setGroups(data);
@@ -76,7 +78,7 @@ const Join = ({ userRole = "member", token = null }) => {
     // payload: { transaction_id } OR { tx_ref }
     try {
       setLoading(true);
-      const res = await fetch("https://irorunde1-production.up.railway.app/flutterwave/verify/", {
+      const res = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/verify/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -118,7 +120,7 @@ const handleFlutterPayment = async () => {
       phone: formData.phone,
     };
 
-    const res = await fetch("https://irorunde1-production.up.railway.app/flutterwave/initialize/", {
+    const res = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/initialize/", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
@@ -168,8 +170,8 @@ const handleFlutterPayment = async () => {
 
     const url =
       userRole === "admin" || userRole === "superadmin"
-        ? "https://irorunde1-production.up.railway.app/accounts/create-member/"
-        : "https://irorunde1-production.up.railway.app/accounts/register/";
+        ? "https://irorunde1-production.up.railway.app/api/accounts/create-member/"
+        : "https://irorunde1-production.up.railway.app/api/accounts/register/";
 
     const data = new FormData();
 

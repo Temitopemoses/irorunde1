@@ -15,7 +15,7 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("https://irorunde1-production.up.railway.app/member-login/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/member-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -56,8 +56,8 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      await fetch("https://irorunde1-production.up.railway.app/csrf/", { credentials: "include" });
-      const response = await fetch("https://irorunde1-production.up.railway.app/accounts/login/", {
+      await fetch("https://irorunde1-production.up.railway.app/api/csrf/", { credentials: "include" });
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/accounts/login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
