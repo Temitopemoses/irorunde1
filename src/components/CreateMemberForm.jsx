@@ -21,7 +21,7 @@ const CreateMemberForm = () => {
         e.preventDefault();
         try {
             await axios.post(
-                'https://irorunde1-production.up.railway.app//api/accounts/member/register/',
+                'https://irorunde1-production.up.railway.app/accounts/member/register/',
                 form,
                 { headers: authHeaders() }
             );

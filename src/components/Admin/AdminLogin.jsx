@@ -26,7 +26,7 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://irorunde1-production.up.railway.app//api';
+      const API_URL = import.meta.env.VITE_API_URL || 'https://irorunde1-production.up.railway.app';
       
       const response = await fetch(`${API_URL}/superadmin-login/`, {
         method: 'POST',

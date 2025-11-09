@@ -13,7 +13,7 @@ const GroupAdminDashboard = () => {
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
-  const API_BASE = 'https://irorunde1-production.up.railway.app//api';
+  const API_BASE = 'https://irorunde1-production.up.railway.app';
 
   // Combined useEffect for login check and initial fetch
   useEffect(() => {
