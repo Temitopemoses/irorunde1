@@ -4,9 +4,7 @@ import Home from "./Pages/home";
 import Join from "./Pages/Join";
 import LoginPage from "./Pages/LoginPage";
 import MemberDashboard from "./Pages/MemberDashboard";
-import AdminLogin from './components/admin/AdminLogin';
-import SuperAdminDashboard from './components/admin/SuperAdminDashboard';
-import GroupAdminDashboard from './components/GroupAdminDashboard'; // This is correctly imported
+import GroupAdminDashboard from './components/GroupAdminDashboard';
 
 function App() {
   return (
@@ -36,7 +34,6 @@ function App() {
 
         {/* Dashboard Routes (These should ideally be protected later) */}
         <Route path="/member-dashboard" element={<MemberDashboard />} />
-        <Route path="/superadmin-dashboard" element={<SuperAdminDashboard />} />
         <Route path="/group-admin/dashboard" element={<GroupAdminDashboard />} /> {/* This route is correctly defined! */}
 
         {/*
