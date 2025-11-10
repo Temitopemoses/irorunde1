@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/admin/:path*",
+      "destination": "https://irorunde1-production.up.railway.app/admin/:path*"
+    },
+    {
+      "source": "/static/:path*",
+      "destination": "https://irorunde1-production.up.railway.app/static/:path*"
+    },
+    {
+      "source": "/media/:path*",
+      "destination": "https://irorunde1-production.up.railway.app/media/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://irorunde1-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
