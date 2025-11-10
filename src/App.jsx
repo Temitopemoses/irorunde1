@@ -4,14 +4,29 @@ import Home from "./Pages/home";
 import Join from "./Pages/Join";
 import LoginPage from "./Pages/LoginPage";
 import MemberDashboard from "./Pages/MemberDashboard";
-// Removed: import AdminLogin from './components/admin/AdminLogin'; // This import is no longer needed
-// Removed: import SuperAdminDashboard from './components/admin/SuperAdminDashboard'; // Assuming this also doesn't exist as a React component
 import GroupAdminDashboard from './components/GroupAdminDashboard';
+
+// You will need to define your Django backend URL in your React app's environment variables
+// For Vite, this would typically be VITE_DJANGO_ADMIN_URL in .env (e.g., VITE_DJANGO_ADMIN_URL=https://irorunde1-production.up.railway.app/admin/)
+const DJANGO_ADMIN_BASE_URL = import.meta.env.VITE_DJANGO_ADMIN_URL || "https://irorunde1-production.up.railway.app/admin/";
+
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Client-side redirect for Django Admin */}
+        <Route
+          path="/irorunde-admin/*" // Use /* to catch all subpaths
+          element={<Navigate to={DJANGO_ADMIN_BASE_URL} replace />}
+        />
+        {/* You may also want this for /system-admin/* if you want to keep that alias */}
+        <Route
+          path="/system-admin/*"
+          element={<Navigate to={DJANGO_ADMIN_BASE_URL} replace />}
+        />
+
+        {/* Public Routes with Navbar */}
         <Route
           path="/"
           element={
@@ -22,15 +37,15 @@ function App() {
           }
         />
 
+        {/* Authentication related routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/Join" element={<Join />} />
 
-        {/* Removed: <Route path="/system-admin" element={<AdminLogin />} /> */}
-
+        {/* Dashboard Routes (These should ideally be protected later) */}
         <Route path="/member-dashboard" element={<MemberDashboard />} />
-        {/* Removed: <Route path="/superadmin-dashboard" element={<SuperAdminDashboard />} /> */}
         <Route path="/group-admin/dashboard" element={<GroupAdminDashboard />} />
 
+        {/* Catch-all route for any undefined paths - your frontend's 404 */}
         <Route path="*" element={
           <>
             <Navbar />
@@ -40,6 +55,7 @@ function App() {
             </div>
           </>
         } />
+
       </Routes>
     </Router>
   );
