@@ -4,7 +4,7 @@
   "installCommand": "npm install && chmod +x node_modules/.bin/vite",
   "rewrites": [
     {
-      "source": "/admin/:path*",
+      "source": "/django-admin/:path*",
       "destination": "https://irorunde1-production.up.railway.app/admin/:path*"
     },
     {
