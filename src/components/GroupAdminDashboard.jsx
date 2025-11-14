@@ -7,6 +7,7 @@ const GroupAdminDashboard = () => {
   const [stats, setStats] = useState({});
   const [recentMembers, setRecentMembers] = useState([]);
   const [contributions, setContributions] = useState([]);
+  const [dailyPayments, setDailyPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [showModal, setShowModal] = useState(false);
@@ -15,7 +16,6 @@ const GroupAdminDashboard = () => {
 
   const API_BASE = 'https://irorunde1-production.up.railway.app/api';
 
-  // Combined useEffect for login check and initial fetch
   useEffect(() => {
     const userData = localStorage.getItem('user');
     const token = localStorage.getItem('token');
@@ -84,42 +84,81 @@ const GroupAdminDashboard = () => {
     }
   };
 
-const fetchContributions = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    const response = await fetch(`${API_BASE}/api/payment-history/`, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
+  // ✅ FIXED: Correct API endpoint and added daily payments
+  const fetchContributions = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      // ✅ FIX: Remove duplicate /api/ from URL
+      const response = await fetch(`${API_BASE}/payment-history/`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      const formatted = data.map(c => ({
-        id: c.id,
-        member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim(),
-        membership_number: c.member?.membership_number,
-        amount: c.amount,
-        date: c.date
-      }));
-      setContributions(formatted);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Contributions data:", data); // Debug log
+        
+        const formatted = data.map(c => ({
+          id: c.id,
+          member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim(),
+          membership_number: c.member?.membership_number,
+          amount: c.amount,
+          date: c.date || c.created_at,
+          payment_type: c.payment_type || 'contribution'
+        }));
+        setContributions(formatted);
 
-      const totalContributions = formatted.reduce((sum, c) => sum + c.amount, 0);
-      const monthlyContributions = formatted
-        .filter(c => new Date(c.date).getMonth() === new Date().getMonth())
-        .reduce((sum, c) => sum + c.amount, 0);
+        // ✅ ADDED: Calculate daily payments
+        const today = new Date().toISOString().split('T')[0];
+        const dailyPaymentsData = formatted.filter(c => 
+          c.date.toString().startsWith(today)
+        );
+        setDailyPayments(dailyPaymentsData);
 
-      setStats(prev => ({
-        ...prev,
-        total_contributions: totalContributions,
-        monthly_contributions: monthlyContributions
-      }));
-    } else {
-      console.error('Failed to fetch contributions');
+        const totalContributions = formatted.reduce((sum, c) => sum + c.amount, 0);
+        const monthlyContributions = formatted
+          .filter(c => new Date(c.date).getMonth() === new Date().getMonth())
+          .reduce((sum, c) => sum + c.amount, 0);
+        
+        const dailyContributions = dailyPaymentsData.reduce((sum, c) => sum + c.amount, 0);
+
+        setStats(prev => ({
+          ...prev,
+          total_contributions: totalContributions,
+          monthly_contributions: monthlyContributions,
+          daily_contributions: dailyContributions,
+          daily_count: dailyPaymentsData.length
+        }));
+      } else {
+        console.error('Failed to fetch contributions:', response.status);
+        showNotification('Failed to load payment data', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching contributions:', error);
+      showNotification('Error loading payment data', 'error');
     }
-  } catch (error) {
-    console.error('Error fetching contributions:', error);
-  }
-};
+  };
 
+  const tryAlternativeEndpoints = async (token) => {
+    const endpoints = [
+      `${API_BASE}/accounts/members/`,
+      `${API_BASE}/members/`,
+      `${API_BASE}/group-admin/members/`
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          return await response.json();
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch from ${endpoint}:`, error);
+      }
+    }
+    return [];
+  };
 
   const showNotification = (message, type = 'success') => {
     setNotification({ show: true, message, type });
@@ -159,6 +198,13 @@ const fetchContributions = async () => {
 
   const handleViewAllMembers = () => setActiveTab('members');
 
+  // ✅ ADDED: Refresh all data
+  const handleRefreshData = () => {
+    setLoading(true);
+    Promise.all([fetchDashboardData(), fetchContributions()])
+      .finally(() => setLoading(false));
+  };
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
@@ -170,7 +216,7 @@ const fetchContributions = async () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Header - ADDED REFRESH BUTTON */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
           <div className="flex items-center">
@@ -180,17 +226,23 @@ const fetchContributions = async () => {
             </span>
           </div>
           <div className="flex items-center space-x-4">
+            <button
+              onClick={handleRefreshData}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition"
+            >
+              Refresh
+            </button>
             <span className="text-gray-700">Welcome, {user?.first_name} {user?.last_name}</span>
             <button onClick={handleLogout} className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Logout</button>
           </div>
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs - UPDATED to include daily-payments */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
-            {['overview', 'members', 'contributions', 'reports'].map(tab => (
+            {['overview', 'members', 'contributions', 'daily-payments', 'reports'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -198,19 +250,20 @@ const fetchContributions = async () => {
                   activeTab === tab ? 'border-amber-500 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
               </button>
             ))}
           </nav>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - ADDED DAILY-PAYMENTS TAB */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {activeTab === 'overview' && (
           <OverviewTab 
             stats={stats} 
             recentMembers={recentMembers} 
+            dailyPayments={dailyPayments}
             onAddMember={() => setShowModal(true)} 
             onViewMembers={handleViewAllMembers} 
           />
@@ -218,11 +271,14 @@ const fetchContributions = async () => {
         {activeTab === 'members' && (
           <MembersTab 
             members={recentMembers} 
-            onRefresh={fetchDashboardData}
+            onRefresh={handleRefreshData}
           />
         )}
         {activeTab === 'contributions' && (
           <ContributionsTab contributions={contributions} />
+        )}
+        {activeTab === 'daily-payments' && (
+          <DailyPaymentsTab payments={dailyPayments} onRefresh={handleRefreshData} />
         )}
         {activeTab === 'reports' && <ReportsTab />}
       </main>
@@ -233,13 +289,12 @@ const fetchContributions = async () => {
   );
 };
 
-
-// Overview Tab Component - Keep exactly as before
-const OverviewTab = ({ stats, recentMembers, onAddMember, onViewMembers }) => {
+// Overview Tab Component - UPDATED with daily stats
+const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewMembers }) => {
   return (
     <div className="px-4 py-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      {/* Stats Grid - ADDED DAILY PAYMENTS CARD */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-8">
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <dt className="text-sm font-medium text-gray-500 truncate">Total Members</dt>
@@ -275,9 +330,22 @@ const OverviewTab = ({ stats, recentMembers, onAddMember, onViewMembers }) => {
             </dd>
           </div>
         </div>
+
+        {/* ✅ ADDED: Today's Payments Card */}
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <dt className="text-sm font-medium text-gray-500 truncate">Today's Payments</dt>
+            <dd className="mt-1 text-3xl font-semibold text-green-600">
+              ₦{(stats.daily_contributions || 0).toLocaleString()}
+            </dd>
+            <dd className="text-sm text-gray-500 mt-1">
+              {stats.daily_count || 0} transactions
+            </dd>
+          </div>
+        </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - UNCHANGED */}
       <div className="mb-8">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex space-x-4">
@@ -296,44 +364,153 @@ const OverviewTab = ({ stats, recentMembers, onAddMember, onViewMembers }) => {
         </div>
       </div>
 
-      {/* Recent Members */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Recent Members
-          </h3>
-        </div>
-        <div className="px-4 py-5 sm:p-6">
-          {recentMembers.length > 0 ? (
-            <div className="space-y-4">
-              {recentMembers.slice(0, 5).map((member) => (
-                <div key={member.id} className="flex items-center justify-between py-3 border-b border-gray-100">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {member.first_name} {member.last_name}
-                    </p>
-                    <p className="text-sm text-gray-500">{member.phone} {member.membership_number && `• ${member.membership_number}`}</p>
+      {/* ADDED: Today's Payments Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Members - UNCHANGED */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              Recent Members
+            </h3>
+          </div>
+          <div className="px-4 py-5 sm:p-6">
+            {recentMembers.length > 0 ? (
+              <div className="space-y-4">
+                {recentMembers.slice(0, 5).map((member) => (
+                  <div key={member.id} className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {member.first_name} {member.last_name}
+                      </p>
+                      <p className="text-sm text-gray-500">{member.phone} {member.membership_number && `• ${member.membership_number}`}</p>
+                    </div>
+                    <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                      member.status === 'active' 
+                        ? 'bg-green-100 text-green-800' 
+                        : member.status === 'inactive'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {member.status || 'Active'}
+                    </span>
                   </div>
-                  <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                    member.status === 'active' 
-                      ? 'bg-green-100 text-green-800' 
-                      : member.status === 'inactive'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {member.status || 'Active'}
-                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">No members found</p>
+            )}
+          </div>
+        </div>
+
+        {/* ✅ ADDED: Today's Payments */}
+        <div className="bg-white shadow rounded-lg">
+          <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              Today's Payments
+            </h3>
+          </div>
+          <div className="px-4 py-5 sm:p-6">
+            {dailyPayments.length > 0 ? (
+              <div className="space-y-3">
+                {dailyPayments.slice(0, 5).map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between py-2 border-b border-gray-100">
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">
+                        {payment.member_name}
+                      </p>
+                      <p className="text-xs text-gray-500">{payment.membership_number}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-green-600">
+                        ₦{payment.amount.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(payment.date).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {dailyPayments.length > 5 && (
+                  <p className="text-center text-sm text-amber-600 mt-2">
+                    +{dailyPayments.length - 5} more payments today
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">No payments today</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ✅ ADDED: Daily Payments Tab Component
+const DailyPaymentsTab = ({ payments, onRefresh }) => {
+  const today = new Date().toISOString().split('T')[0];
+  const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+
+  return (
+    <div className="px-4 py-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-medium text-gray-900">
+          Today's Payments ({today})
+        </h2>
+        <button
+          onClick={onRefresh}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-green-50 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-green-600">₦{totalAmount.toLocaleString()}</p>
+          <p className="text-gray-600">Total Collected Today</p>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <p className="text-2xl font-bold text-blue-600">{payments.length}</p>
+          <p className="text-gray-600">Transactions Today</p>
+        </div>
+        <div className="bg-purple-50 p-4 rounded-lg">
+          <p className="text-xl font-bold text-purple-600">{today}</p>
+          <p className="text-gray-600">Date</p>
+        </div>
+      </div>
+
+      <div className="bg-white shadow rounded-lg">
+        <div className="px-4 py-5 sm:p-6">
+          {payments.length > 0 ? (
+            <div className="space-y-4">
+              {payments.map((payment) => (
+                <div key={payment.id} className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold text-gray-900">{payment.member_name}</p>
+                      <p className="text-sm text-gray-600">{payment.membership_number}</p>
+                      <p className="text-xs text-gray-500 capitalize">{payment.payment_type}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-green-600">₦{payment.amount.toLocaleString()}</p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(payment.date).toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-gray-500 text-center py-4">No members found</p>
+            <p className="text-gray-500 text-center py-4">No payments recorded today</p>
           )}
         </div>
       </div>
     </div>
   );
 };
+
 
 // Members Tab Component - Keep exactly as before
 const MembersTab = ({ members, onRefresh }) => {

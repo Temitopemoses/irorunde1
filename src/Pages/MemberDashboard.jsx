@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-
 const MemberDashboard = () => {
   const [userData, setUserData] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
@@ -10,7 +9,6 @@ const MemberDashboard = () => {
   const [amount, setAmount] = useState("");
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
-
 
   useEffect(() => {
     fetchDashboardData();
@@ -47,10 +45,12 @@ const MemberDashboard = () => {
       setLoading(false);
     }
   };
+
+  // ✅ FIXED: Correct API endpoint (removed duplicate /api/)
   const fetchPaymentHistory = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/api/payment-history/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/payment-history/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -58,66 +58,70 @@ const MemberDashboard = () => {
 
       if (response.ok) {
         const data = await response.json();
+        console.log("Payment history data:", data); // Debug log
         setPaymentHistory(data);
       } else {
-        console.error("Failed to load payment history");
+        console.error("Failed to load payment history:", response.status);
       }
     } catch (err) {
       console.error("Payment history fetch error:", err);
     }
   };
 
+  // ✅ ENHANCED: Added missing fields for payment
+  const handlePayment = async () => {
+    const token = localStorage.getItem("accessToken");
 
-const handlePayment = async () => {
-  const token = localStorage.getItem("accessToken");
-
-  if (!amount || parseFloat(amount) < 1100) {
-    alert("Minimum contribution is ₦1100.");
-    return;
-  }
-
-  console.log("userData:", userData);
-console.log("dashboardData:", dashboardData);
-
-  if (!dashboardData?.member_info?.group_id) {
-    alert("Missing user or group information.");
-    return;
-  }
-
-  try {
-    setLoadingPayment(true);
-
-    const response = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/initialize/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-
-      },
-      body: JSON.stringify({
-        amount: parseFloat(amount),
-        payment_type: "contribution",
-        group_id: dashboardData.member_info.group_id, // from backend dashboard
-
-      }),
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.payment_link) {
-      window.location.href = data.payment_link;
-    } else {
-      console.error("Payment init failed:", data);
-      alert(data.error || data.message || "Unable to start payment. Please try again.");
+    if (!amount || parseFloat(amount) < 1100) {
+      alert("Minimum contribution is ₦1100.");
+      return;
     }
-  } catch (error) {
-    console.error("Payment error:", error);
-    alert("Network error while initiating payment.");
-  } finally {
-    setLoadingPayment(false);
-    setShowPaymentModal(false);
-  }
-};
+
+    if (!dashboardData?.member_info?.group_id || !dashboardData?.member_info?.name) {
+      alert("Missing user or group information.");
+      return;
+    }
+
+    try {
+      setLoadingPayment(true);
+
+      // Get user info for payment
+      const memberInfo = dashboardData.member_info;
+      const userInfo = userData || JSON.parse(localStorage.getItem('userData') || '{}');
+
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/initialize/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: parseFloat(amount),
+          payment_type: "contribution",
+          group_id: memberInfo.group_id,
+          // ✅ ADDED: Required fields for payment
+          name: memberInfo.name,
+          email: userInfo.email || `${memberInfo.name.toLowerCase().replace(/\s+/g, '.')}@irorunde.com`,
+          phone: memberInfo.phone || userInfo.phone,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.payment_link) {
+        window.location.href = data.payment_link;
+      } else {
+        console.error("Payment init failed:", data);
+        alert(data.error || data.message || "Unable to start payment. Please try again.");
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      alert("Network error while initiating payment.");
+    } finally {
+      setLoadingPayment(false);
+      setShowPaymentModal(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -125,6 +129,41 @@ console.log("dashboardData:", dashboardData);
     localStorage.removeItem('userData');
     window.location.href = '/login';
   };
+
+  // ✅ ADDED: Payment verification after redirect
+  useEffect(() => {
+    const verifyPaymentAfterRedirect = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tx_ref = urlParams.get('tx_ref');
+      const status = urlParams.get('status');
+      
+      if (status === 'successful' && tx_ref) {
+        try {
+          const token = localStorage.getItem('accessToken');
+          const response = await fetch(`https://irorunde1-production.up.railway.app/api/verify_flutterwave_payment?tx_ref=${tx_ref}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            alert('✅ Payment verified successfully!');
+            // Refresh data
+            fetchDashboardData();
+            fetchPaymentHistory();
+          }
+        } catch (error) {
+          console.error('Payment verification error:', error);
+        }
+        
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+    
+    verifyPaymentAfterRedirect();
+  }, []);
 
   if (loading) {
     return (
@@ -374,12 +413,20 @@ console.log("dashboardData:", dashboardData);
             </div>
           )}
 
-        {/* Payment History */}
+        {/* Payment History - ENHANCED */}
           {paymentHistory.length > 0 ? (
             <div className="mt-10">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                Payment History
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Your Payment History ({paymentHistory.length} transactions)
+                </h3>
+                <button
+                  onClick={fetchPaymentHistory}
+                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm"
+                >
+                  Refresh
+                </button>
+              </div>
               <div className="overflow-x-auto bg-white shadow rounded-lg">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -396,30 +443,38 @@ console.log("dashboardData:", dashboardData);
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Status
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Reference
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paymentHistory.map((payment) => (
                       <tr key={payment.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {new Date(payment.date).toLocaleDateString()}
+                          {new Date(payment.date || payment.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm capitalize">
                           {payment.payment_type}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          ₦{payment.amount.toLocaleString()}
+                          ₦{payment.amount?.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span
                             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              payment.status === "successful"
+                              payment.status === "successful" || payment.is_successful
                                 ? "bg-green-100 text-green-800"
-                                : "bg-yellow-100 text-yellow-800"
+                                : payment.status === "pending"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
                             }`}
                           >
-                            {payment.status}
+                            {payment.status || (payment.is_successful ? "successful" : "pending")}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
+                          {payment.tx_ref || payment.flutterwave_reference || 'N/A'}
                         </td>
                       </tr>
                     ))}
@@ -428,76 +483,83 @@ console.log("dashboardData:", dashboardData);
               </div>
             </div>
           ) : (
-            <div className="mt-10 text-gray-500 text-sm italic">
-              No payments found yet.
+            <div className="mt-10 text-center">
+              <div className="bg-white shadow rounded-lg p-8">
+                <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment History</h3>
+                <p className="text-gray-500 mb-4">You haven't made any payments yet.</p>
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
+                >
+                  Make Your First Payment
+                </button>
+              </div>
             </div>
           )}
 
-      
           {/* Quick Actions */}
-        <div className="mt-8">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            
-            {/* Make Contribution Button */}
-            <button
-              onClick={() => setShowPaymentModal(true)}
-              className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
-            >
-              <div className="flex items-center">
-                <div className="flex-shrink-0 bg-amber-100 rounded-md p-2">
-                  <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                  </svg>
+          <div className="mt-8">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Make Contribution Button */}
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
+              >
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 bg-amber-100 rounded-md p-2">
+                    <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-lg font-medium text-gray-900">Make Contribution</h4>
+                    <p className="mt-1 text-sm text-gray-500">Add funds to your account</p>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <h4 className="text-lg font-medium text-gray-900">Make Contribution</h4>
-                  <p className="mt-1 text-sm text-gray-500">Add funds to your account</p>
-                </div>
-              </div>
-            </button>
-
+              </button>
+            </div>
           </div>
         </div>
-
-        </div>
       </main>
+
       {/* Flutterwave Payment Modal */}
-{showPaymentModal && (
-  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-    <div className="bg-white rounded-lg shadow-lg w-96 p-6 relative">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4">Make a Contribution</h2>
+      {showPaymentModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-96 p-6 relative">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Make a Contribution</h2>
 
-      <input
-        type="number"
-        placeholder="Enter amount (₦1100 minimum)"
-        min="1100"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        className="border border-gray-300 rounded-lg w-full p-2 mb-4 focus:ring-amber-500 focus:border-amber-500"
-      />
+            <input
+              type="number"
+              placeholder="Enter amount (₦1100 minimum)"
+              min="1100"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="border border-gray-300 rounded-lg w-full p-2 mb-4 focus:ring-amber-500 focus:border-amber-500"
+            />
 
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={() => setShowPaymentModal(false)}
-          className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400"
-        >
-          Cancel
-        </button>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
 
-        <button
-          onClick={handlePayment}
-          disabled={loadingPayment}
-          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
-        >
-          {loadingPayment ? "Processing..." : "Pay Now"}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
+              <button
+                onClick={handlePayment}
+                disabled={loadingPayment}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {loadingPayment ? "Processing..." : "Pay Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
