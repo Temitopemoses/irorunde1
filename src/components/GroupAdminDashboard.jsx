@@ -88,7 +88,7 @@ const GroupAdminDashboard = () => {
   const fetchContributions = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`${API_BASE}/payment-history/`, {
+      const response = await fetch(`${API_BASE}/api/payment-history/`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
 
