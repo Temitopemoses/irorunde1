@@ -84,42 +84,43 @@ const GroupAdminDashboard = () => {
     }
   };
 
-  // ✅ FIXED: Correct API endpoint and added daily payments
+  // ✅ FIXED: Correct API endpoint
   const fetchContributions = async () => {
     const token = localStorage.getItem('token');
     try {
-      // ✅ FIX: Remove duplicate /api/ from URL
       const response = await fetch(`${API_BASE}/payment-history/`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Contributions data:", data); // Debug log
+        console.log("✅ Contributions data loaded:", data);
         
-        const formatted = data.map(c => ({
+        const formatted = Array.isArray(data) ? data.map(c => ({
           id: c.id,
-          member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim(),
-          membership_number: c.member?.membership_number,
-          amount: c.amount,
+          member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim() || 'Unknown Member',
+          membership_number: c.member?.membership_number || 'N/A',
+          amount: c.amount || 0,
           date: c.date || c.created_at,
           payment_type: c.payment_type || 'contribution'
-        }));
+        })) : [];
+        
         setContributions(formatted);
 
-        // ✅ ADDED: Calculate daily payments
+        // Calculate daily payments
         const today = new Date().toISOString().split('T')[0];
         const dailyPaymentsData = formatted.filter(c => 
-          c.date.toString().startsWith(today)
+          c.date && c.date.toString().startsWith(today)
         );
         setDailyPayments(dailyPaymentsData);
 
-        const totalContributions = formatted.reduce((sum, c) => sum + c.amount, 0);
+        const totalContributions = formatted.reduce((sum, c) => sum + (c.amount || 0), 0);
+        const currentMonth = new Date().getMonth();
         const monthlyContributions = formatted
-          .filter(c => new Date(c.date).getMonth() === new Date().getMonth())
-          .reduce((sum, c) => sum + c.amount, 0);
+          .filter(c => c.date && new Date(c.date).getMonth() === currentMonth)
+          .reduce((sum, c) => sum + (c.amount || 0), 0);
         
-        const dailyContributions = dailyPaymentsData.reduce((sum, c) => sum + c.amount, 0);
+        const dailyContributions = dailyPaymentsData.reduce((sum, c) => sum + (c.amount || 0), 0);
 
         setStats(prev => ({
           ...prev,
@@ -129,15 +130,16 @@ const GroupAdminDashboard = () => {
           daily_count: dailyPaymentsData.length
         }));
       } else {
-        console.error('Failed to fetch contributions:', response.status);
+        console.error('❌ Failed to fetch contributions:', response.status);
         showNotification('Failed to load payment data', 'error');
       }
     } catch (error) {
-      console.error('Error fetching contributions:', error);
+      console.error('❌ Error fetching contributions:', error);
       showNotification('Error loading payment data', 'error');
     }
   };
 
+  // ✅ ADDED: Missing function
   const tryAlternativeEndpoints = async (token) => {
     const endpoints = [
       `${API_BASE}/accounts/members/`,
@@ -168,7 +170,11 @@ const GroupAdminDashboard = () => {
   const handleAddMember = async (formData) => {
     const token = localStorage.getItem('token');
     const memberData = new FormData();
-    Object.keys(formData).forEach(key => { if (formData[key]) memberData.append(key, formData[key]); });
+    Object.keys(formData).forEach(key => { 
+      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
+        memberData.append(key, formData[key]);
+      }
+    });
 
     try {
       const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
@@ -182,8 +188,8 @@ const GroupAdminDashboard = () => {
         showNotification(`Member ${formData.first_name} added successfully!`);
         setShowModal(false);
       } else {
-        const errorText = await response.text();
-        showNotification(`Failed to add member: ${errorText}`, 'error');
+        const errorData = await response.json();
+        showNotification(`Failed to add member: ${errorData.error || 'Unknown error'}`, 'error');
       }
     } catch (error) {
       console.error('Error adding member:', error);
@@ -198,7 +204,6 @@ const GroupAdminDashboard = () => {
 
   const handleViewAllMembers = () => setActiveTab('members');
 
-  // ✅ ADDED: Refresh all data
   const handleRefreshData = () => {
     setLoading(true);
     Promise.all([fetchDashboardData(), fetchContributions()])
@@ -216,7 +221,7 @@ const GroupAdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header - ADDED REFRESH BUTTON */}
+      {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
           <div className="flex items-center">
@@ -238,7 +243,7 @@ const GroupAdminDashboard = () => {
         </div>
       </header>
 
-      {/* Navigation Tabs - UPDATED to include daily-payments */}
+      {/* Navigation Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
@@ -257,7 +262,7 @@ const GroupAdminDashboard = () => {
         </div>
       </div>
 
-      {/* Main Content - ADDED DAILY-PAYMENTS TAB */}
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {activeTab === 'overview' && (
           <OverviewTab 
@@ -289,11 +294,11 @@ const GroupAdminDashboard = () => {
   );
 };
 
-// Overview Tab Component - UPDATED with daily stats
+// Overview Tab Component
 const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewMembers }) => {
   return (
     <div className="px-4 py-6">
-      {/* Stats Grid - ADDED DAILY PAYMENTS CARD */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-8">
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
@@ -331,7 +336,6 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
           </div>
         </div>
 
-        {/* ✅ ADDED: Today's Payments Card */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <dt className="text-sm font-medium text-gray-500 truncate">Today's Payments</dt>
@@ -345,7 +349,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
         </div>
       </div>
 
-      {/* Quick Actions - UNCHANGED */}
+      {/* Quick Actions */}
       <div className="mb-8">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
         <div className="flex space-x-4">
@@ -364,9 +368,8 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
         </div>
       </div>
 
-      {/* ADDED: Today's Payments Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Members - UNCHANGED */}
+        {/* Recent Members */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
             <h3 className="text-lg leading-6 font-medium text-gray-900">
@@ -402,7 +405,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
           </div>
         </div>
 
-        {/* ✅ ADDED: Today's Payments */}
+        {/* Today's Payments */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
             <h3 className="text-lg leading-6 font-medium text-gray-900">
@@ -422,10 +425,10 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-green-600">
-                        ₦{payment.amount.toLocaleString()}
+                        ₦{payment.amount?.toLocaleString()}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {new Date(payment.date).toLocaleTimeString()}
+                        {payment.date ? new Date(payment.date).toLocaleTimeString() : 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -446,10 +449,10 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
   );
 };
 
-// ✅ ADDED: Daily Payments Tab Component
+// Daily Payments Tab Component
 const DailyPaymentsTab = ({ payments, onRefresh }) => {
   const today = new Date().toISOString().split('T')[0];
-  const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
   return (
     <div className="px-4 py-6">
@@ -493,9 +496,9 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
                       <p className="text-xs text-gray-500 capitalize">{payment.payment_type}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold text-green-600">₦{payment.amount.toLocaleString()}</p>
+                      <p className="text-lg font-bold text-green-600">₦{payment.amount?.toLocaleString()}</p>
                       <p className="text-sm text-gray-500">
-                        {new Date(payment.date).toLocaleTimeString()}
+                        {payment.date ? new Date(payment.date).toLocaleTimeString() : 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -511,8 +514,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
   );
 };
 
-
-// Members Tab Component - Keep exactly as before
+// Members Tab Component
 const MembersTab = ({ members, onRefresh }) => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -604,7 +606,7 @@ const MembersTab = ({ members, onRefresh }) => {
   );
 };
 
-// Contributions Tab Component - Keep exactly as before
+// Contributions Tab Component
 const ContributionsTab = ({ contributions }) => {
   return (
     <div className="px-4 py-6">
@@ -636,10 +638,10 @@ const ContributionsTab = ({ contributions }) => {
                         {c.membership_number}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        ₦{c.amount.toLocaleString()}
+                        ₦{c.amount?.toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(c.date).toLocaleDateString()}
+                        {c.date ? new Date(c.date).toLocaleDateString() : 'N/A'}
                       </td>
                     </tr>
                   ))}
@@ -655,7 +657,7 @@ const ContributionsTab = ({ contributions }) => {
   );
 };
 
-// Reports Tab Component - Keep exactly as before
+// Reports Tab Component
 const ReportsTab = () => {
   return (
     <div className="px-4 py-6">
@@ -675,7 +677,7 @@ const ReportsTab = () => {
   );
 };
 
-// Add Member Modal Component - Keep exactly as before
+// Add Member Modal Component
 const AddMemberModal = ({ onClose, onAddMember, user }) => {
   const [formData, setFormData] = useState({
     first_name: '',
@@ -730,19 +732,17 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
 
         <form onSubmit={handleSubmit}>
           {step === 1 && (
-            
             <div className="space-y-4">
-
               <div>
-              <label className="block text-sm font-medium text-gray-700">Passport Photo</label>
-              <input
-                type="file"
-                name="passport"
-                accept="image/*"
-                onChange={(e) => setFormData({ ...formData, passport: e.target.files[0] })}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-              />
-            </div>
+                <label className="block text-sm font-medium text-gray-700">Passport Photo</label>
+                <input
+                  type="file"
+                  name="passport"
+                  accept="image/*"
+                  onChange={(e) => setFormData({ ...formData, passport: e.target.files[0] })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                />
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">First Name *</label>
@@ -887,7 +887,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
 
 // Notification Component
 const Notification = ({ message, type }) => (
-  <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg ${
+  <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
     type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
   }`}>
     {message}
