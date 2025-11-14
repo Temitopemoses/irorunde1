@@ -221,7 +221,8 @@ const handleFlutterPayment = async () => {
       const result = await response.json();
 
       if (response.ok) {
-        alert(result.message || "Registration successful!");
+        alert(result.message || "Registration successful!, Redirecting to login.");
+        window.location.href = "/login";
         // reset
         setStep(1);
         setIsPaymentDone(false);

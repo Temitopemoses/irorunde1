@@ -14,6 +14,7 @@ const MemberDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    fetchPaymentHistory();
   }, []);
 
   const fetchDashboardData = async () => {
