@@ -1,7 +1,7 @@
 // Join.jsx
 import { useState, useEffect } from "react";
 import { FlutterWaveButton } from "flutterwave-react-v3"; // optional - we do redirect method
-
+import { Helmet } from "react-helmet-async";
 const Join = ({ userRole = "member", token = null }) => {
   const [step, setStep] = useState(1);
   const [groups, setGroups] = useState([]);
@@ -163,7 +163,7 @@ const handleFlutterPayment = async () => {
       alert("Please complete payment first (Pay button).");
       return;
     }
-
+  
     setLoading(true);
 
     const url =
@@ -260,257 +260,251 @@ const handleFlutterPayment = async () => {
 
   // ----------------- JSX (keeps your layout) -----------------
   return (
-    <div className="min-h-screen bg-amber-50 flex flex-col items-center pt-24 pb-2 px-6">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-center text-amber-600 mb-6">
-          Join Irorunde Cooperative Society
-        </h2>
+    <><Helmet>
+      <title>Join Irorunde Cooperative Society</title>
+      <meta
+        name="description"
+        content="Join Irorunde Cooperative Society today! Complete our easy 3-step registration process to become a member and enjoy financial empowerment through savings, loans, and cooperative support." />
+      <link rel="canonical" href="https://irorunde-cooperative.vercel.app/join" />
+    </Helmet><div className="min-h-screen bg-amber-50 flex flex-col items-center pt-24 pb-2 px-6">
+        <div className="max-w-2xl w-full bg-white rounded-2xl shadow-lg p-8">
+          <h2 className="text-2xl font-bold text-center text-amber-600 mb-6">
+            Join Irorunde Cooperative Society
+          </h2>
 
-        {/* Progress Indicator */}
-        <div className="flex justify-between items-center mb-8">
-          {["Personal Info", "Next of Kin", "Payment"].map((label, index) => (
-            <div key={index} className="flex-1 flex flex-col items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
-                  step >= index + 1 ? "bg-amber-600 text-white" : "bg-gray-300 text-gray-600"
-                }`}
-              >
-                {index + 1}
-              </div>
-              <p className="text-xs mt-2 text-gray-600">{label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Step 1 */}
-        {step === 1 && (
-          <form className="grid gap-4" onSubmit={(e) => e.preventDefault()}>
-            {userRole !== "superadmin" && (
-              <div>
-                <label className="text-sm text-gray-600 font-medium">Select Irorunde Group *</label>
-                <select
-                  name="group"
-                  value={formData.group}
-                  onChange={handleChange}
-                  className="border p-3 rounded-md w-full mt-1"
-                  required
+          {/* Progress Indicator */}
+          <div className="flex justify-between items-center mb-8">
+            {["Personal Info", "Next of Kin", "Payment"].map((label, index) => (
+              <div key={index} className="flex-1 flex flex-col items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${step >= index + 1 ? "bg-amber-600 text-white" : "bg-gray-300 text-gray-600"}`}
                 >
-                  <option value="">-- Choose Group --</option>
-                  {groups.length > 0 ? (
-                    groups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="1">Irorunde 1</option>
-                      <option value="2">Irorunde 2</option>
-                      <option value="3">Irorunde 4</option>
-                      <option value="4">Irorunde 6</option>
-                      <option value="5">Oluwanisola</option>
-                      <option value="6">Irorunde 7</option>
-                    </>
-                  )}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {groups.length > 0 ? `${groups.length} groups available` : "Using default groups"}
-                </p>
+                  {index + 1}
+                </div>
+                <p className="text-xs mt-2 text-gray-600">{label}</p>
               </div>
-            )}
+            ))}
+          </div>
 
-            {userRole !== "superadmin" && (
-              <div>
-                <label className="text-sm text-gray-600 font-medium">Passport Photo *</label>
-                <input
-                  type="file"
-                  name="passport"
-                  accept="image/*"
+          {/* Step 1 */}
+          {step === 1 && (
+            <form className="grid gap-4" onSubmit={(e) => e.preventDefault()}>
+              {userRole !== "superadmin" && (
+                <div>
+                  <label className="text-sm text-gray-600 font-medium">Select Irorunde Group *</label>
+                  <select
+                    name="group"
+                    value={formData.group}
+                    onChange={handleChange}
+                    className="border p-3 rounded-md w-full mt-1"
+                    required
+                  >
+                    <option value="">-- Choose Group --</option>
+                    {groups.length > 0 ? (
+                      groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="1">Irorunde 1</option>
+                        <option value="2">Irorunde 2</option>
+                        <option value="3">Irorunde 4</option>
+                        <option value="4">Irorunde 6</option>
+                        <option value="5">Oluwanisola</option>
+                        <option value="6">Irorunde 7</option>
+                      </>
+                    )}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {groups.length > 0 ? `${groups.length} groups available` : "Using default groups"}
+                  </p>
+                </div>
+              )}
+
+              {userRole !== "superadmin" && (
+                <div>
+                  <label className="text-sm text-gray-600 font-medium">Passport Photo *</label>
+                  <input
+                    type="file"
+                    name="passport"
+                    accept="image/*"
+                    onChange={handleChange}
+                    className="w-full border p-2 rounded-md mt-1"
+                    required />
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <input
+                    type="text"
+                    name="first_name"
+                    placeholder="First Name *"
+                    value={formData.first_name}
+                    onChange={handleChange}
+                    className="border p-3 rounded-md w-full"
+                    required />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    name="surname"
+                    placeholder="Surname *"
+                    value={formData.surname}
+                    onChange={handleChange}
+                    className="border p-3 rounded-md w-full"
+                    required />
+                </div>
+              </div>
+
+              <input
+                type="tel"
+                name="phone"
+                placeholder="Phone Number *"
+                value={formData.phone}
+                onChange={handleChange}
+                className="border p-3 rounded-md w-full"
+                required />
+
+              {userRole !== "superadmin" && (
+                <textarea
+                  name="address"
+                  placeholder="Home Address *"
+                  value={formData.address}
                   onChange={handleChange}
-                  className="w-full border p-2 rounded-md mt-1"
-                  required
-                />
-              </div>
-            )}
+                  className="border p-3 rounded-md w-full h-20"
+                  required />
+              )}
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
+              <div className="flex justify-end mt-4">
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
+                  disabled={!formData.first_name ||
+                    !formData.surname ||
+                    !formData.phone ||
+                    (userRole !== "superadmin" && (!formData.group || !formData.address))}
+                >
+                  Next
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Step 2 */}
+          {step === 2 && userRole !== "superadmin" && (
+            <form className="grid gap-4" onSubmit={(e) => e.preventDefault()}>
+              <div className="grid md:grid-cols-2 gap-4">
                 <input
                   type="text"
-                  name="first_name"
-                  placeholder="First Name *"
-                  value={formData.first_name}
+                  name="kinName"
+                  placeholder="Next of Kin First Name *"
+                  value={formData.kinName}
                   onChange={handleChange}
                   className="border p-3 rounded-md w-full"
-                  required
-                />
-              </div>
-              <div>
+                  required />
                 <input
                   type="text"
-                  name="surname"
-                  placeholder="Surname *"
-                  value={formData.surname}
+                  name="kinSurname"
+                  placeholder="Next of Kin Surname *"
+                  value={formData.kinSurname}
                   onChange={handleChange}
                   className="border p-3 rounded-md w-full"
-                  required
-                />
+                  required />
               </div>
-            </div>
-
-            <input
-              type="tel"
-              name="phone"
-              placeholder="Phone Number *"
-              value={formData.phone}
-              onChange={handleChange}
-              className="border p-3 rounded-md w-full"
-              required
-            />
-
-            {userRole !== "superadmin" && (
+              <input
+                type="tel"
+                name="kinPhone"
+                placeholder="Next of Kin Phone Number *"
+                value={formData.kinPhone}
+                onChange={handleChange}
+                className="border p-3 rounded-md w-full"
+                required />
               <textarea
-                name="address"
-                placeholder="Home Address *"
-                value={formData.address}
+                name="kinAddress"
+                placeholder="Next of Kin Address *"
+                value={formData.kinAddress}
                 onChange={handleChange}
                 className="border p-3 rounded-md w-full h-20"
                 required
-              />
-            )}
+              ></textarea>
 
-            <div className="flex justify-end mt-4">
-              <button
-                type="button"
-                onClick={nextStep}
-                className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
-                disabled={
-                  !formData.first_name ||
-                  !formData.surname ||
-                  !formData.phone ||
-                  (userRole !== "superadmin" && (!formData.group || !formData.address))
-                }
-              >
-                Next
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Step 2 */}
-        {step === 2 && userRole !== "superadmin" && (
-          <form className="grid gap-4" onSubmit={(e) => e.preventDefault()}>
-            <div className="grid md:grid-cols-2 gap-4">
-              <input
-                type="text"
-                name="kinName"
-                placeholder="Next of Kin First Name *"
-                value={formData.kinName}
-                onChange={handleChange}
-                className="border p-3 rounded-md w-full"
-                required
-              />
-              <input
-                type="text"
-                name="kinSurname"
-                placeholder="Next of Kin Surname *"
-                value={formData.kinSurname}
-                onChange={handleChange}
-                className="border p-3 rounded-md w-full"
-                required
-              />
-            </div>
-            <input
-              type="tel"
-              name="kinPhone"
-              placeholder="Next of Kin Phone Number *"
-              value={formData.kinPhone}
-              onChange={handleChange}
-              className="border p-3 rounded-md w-full"
-              required
-            />
-            <textarea
-              name="kinAddress"
-              placeholder="Next of Kin Address *"
-              value={formData.kinAddress}
-              onChange={handleChange}
-              className="border p-3 rounded-md w-full h-20"
-              required
-            ></textarea>
-
-            <div className="flex justify-between mt-4">
-              <button type="button" onClick={prevStep} className="border border-amber-600 text-amber-600 px-6 py-2 rounded-lg">
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={nextStep}
-                className="bg-amber-600 text-white px-6 py-2 rounded-lg"
-                disabled={!formData.kinName || !formData.kinSurname || !formData.kinPhone || !formData.kinAddress}
-              >
-                Next
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Step 3: Payment + Register */}
-        {step === 3 && (
-          <form onSubmit={handleSubmit} className="text-center">
-            <div className="bg-amber-50 p-6 rounded-lg mb-6">
-              <h3 className="text-xl font-semibold text-gray-700 mb-4">Registration Summary</h3>
-              <div className="text-left space-y-2 text-sm">
-                <p>
-                  <strong>Name:</strong> {formData.first_name} {formData.surname}
-                </p>
-                <p>
-                  <strong>Phone:</strong> {formData.phone}
-                </p>
-                {formData.group && (
-                  <p>
-                    <strong>Group:</strong> {getSelectedGroupName()}
-                  </p>
-                )}
-                {formData.address && <p><strong>Address:</strong> {formData.address}</p>}
-              </div>
-            </div>
-
-            {/* Members must pay first */}
-            {userRole === "member" && !isPaymentDone && (
-              <>
-                <h3 className="text-xl font-semibold text-gray-700 mb-4">Membership Payment</h3>
-                <p className="text-gray-600 mb-6">To continue, pay <strong>₦20,300</strong> for membership registration.</p>
-
+              <div className="flex justify-between mt-4">
+                <button type="button" onClick={prevStep} className="border border-amber-600 text-amber-600 px-6 py-2 rounded-lg">
+                  Back
+                </button>
                 <button
                   type="button"
-                  onClick={handleFlutterPayment}
-                  className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
-                  disabled={loading}
+                  onClick={nextStep}
+                  className="bg-amber-600 text-white px-6 py-2 rounded-lg"
+                  disabled={!formData.kinName || !formData.kinSurname || !formData.kinPhone || !formData.kinAddress}
                 >
-                  {loading ? "Processing..." : "Pay ₦20,300"}
-                </button>
-              </>
-            )}
-
-            {/* If admin OR payment done, show Complete Registration */}
-            {(userRole !== "member" || isPaymentDone) && (
-              <div className="mt-6">
-                <button
-                  type="submit"
-                  className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
-                  disabled={loading}
-                >
-                  {loading ? "Registering..." : "Complete Registration"}
+                  Next
                 </button>
               </div>
-            )}
+            </form>
+          )}
 
-            {/* show small note if payment verified */}
-            {isPaymentDone && <p className="text-sm text-green-600 mt-3">Payment verified — you may complete registration.</p>}
-          </form>
-        )}
-      </div>
-    </div>
+          {/* Step 3: Payment + Register */}
+          {step === 3 && (
+            <form onSubmit={handleSubmit} className="text-center">
+              <div className="bg-amber-50 p-6 rounded-lg mb-6">
+                <h3 className="text-xl font-semibold text-gray-700 mb-4">Registration Summary</h3>
+                <div className="text-left space-y-2 text-sm">
+                  <p>
+                    <strong>Name:</strong> {formData.first_name} {formData.surname}
+                  </p>
+                  <p>
+                    <strong>Phone:</strong> {formData.phone}
+                  </p>
+                  {formData.group && (
+                    <p>
+                      <strong>Group:</strong> {getSelectedGroupName()}
+                    </p>
+                  )}
+                  {formData.address && <p><strong>Address:</strong> {formData.address}</p>}
+                </div>
+              </div>
+
+              {/* Members must pay first */}
+              {userRole === "member" && !isPaymentDone && (
+                <>
+                  <h3 className="text-xl font-semibold text-gray-700 mb-4">Membership Payment</h3>
+                  <p className="text-gray-600 mb-6">To continue, pay <strong>₦20,300</strong> for membership registration.</p>
+
+                  <button
+                    type="button"
+                    onClick={handleFlutterPayment}
+                    className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
+                    disabled={loading}
+                  >
+                    {loading ? "Processing..." : "Pay ₦20,300"}
+                  </button>
+                </>
+              )}
+
+              {/* If admin OR payment done, show Complete Registration */}
+              {(userRole !== "member" || isPaymentDone) && (
+                <div className="mt-6">
+                  <button
+                    type="submit"
+                    className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 transition"
+                    disabled={loading}
+                  >
+                    {loading ? "Registering..." : "Complete Registration"}
+                  </button>
+                </div>
+              )}
+
+              {/* show small note if payment verified */}
+              {isPaymentDone && <p className="text-sm text-green-600 mt-3">Payment verified — you may complete registration.</p>}
+            </form>
+          )}
+        </div>
+      </div></>
   );
 };
 

@@ -14,7 +14,7 @@ const DJANGO_ADMIN_BASE_URL = import.meta.env.VITE_DJANGO_ADMIN_URL || "https://
 function App() {
   return (
     <Router>
-      <Routes>
+      <Routes> 
         {/* Client-side redirect for Django Admin */}
         <Route
           path="/irorunde-admin/*" // Use /* to catch all subpaths
