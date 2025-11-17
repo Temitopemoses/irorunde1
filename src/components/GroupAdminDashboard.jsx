@@ -162,23 +162,28 @@ const GroupAdminDashboard = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
-  const handleAddMember = async (formData) => {
-    const token = localStorage.getItem('token');
-    const memberData = new FormData();
-    
-    // Append all form fields - card_number is now required
-    Object.keys(formData).forEach(key => { 
-      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
-        memberData.append(key, formData[key]);
-      }
-    });
 
-    try {
-      const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: memberData
-      });
+  const handleAddMember = async (formData) => {
+    const token = localStorage.getItem('token');
+    const memberData = new FormData();
+    
+    // Append all form fields - card_number is now required
+    Object.keys(formData).forEach(key => { 
+      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
+        memberData.append(key, formData[key]);
+      }
+    });
+
+    try {
+      const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          // !!! REMOVE THIS LINE: 'Content-Type': 'application/json' 
+        },
+        body: memberData // The browser will set the correct Content-Type: multipart/form-data
+      });
+
 
       if (response.ok) {
         await fetchDashboardData();
