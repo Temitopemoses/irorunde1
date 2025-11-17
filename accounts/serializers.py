@@ -22,9 +22,15 @@ class NextOfKinSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class MemberSerializer(serializers.ModelSerializer):
-    user = UserSerializer()
+    first_name = serializers.CharField(source='user.first_name', read_only=True)
+    last_name = serializers.CharField(source='user.last_name', read_only=True)
+    
+    # 2. RETAIN OTHER FIELDS
     next_of_kin = NextOfKinSerializer(read_only=True)
     group_name = serializers.CharField(source='group.name', read_only=True)
+    
+    # 3. CARD NUMBER (Keep this writable if admins are inputting it)
+    card_number = serializers.CharField(max_length=10, required=False)
     
     class Meta:
         model = Member
@@ -36,6 +42,8 @@ class PaymentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class MemberRegistrationSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(write_only=True,)
+    card_number = serializers.CharField(write_only=True,)
     first_name = serializers.CharField(write_only=True)
     surname = serializers.CharField(write_only=True)
     phone = serializers.CharField()
@@ -50,7 +58,7 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Member
-        fields = ('first_name', 'surname', 'phone', 'address', 'group', 
+        fields = ('email', 'card_number', 'first_name', 'surname', 'phone', 'address', 'group', 
                  'passport', 'kinName', 'kinSurname', 'kinPhone', 'kinAddress', 'paymentConfirmed')
     
     def validate_group(self, value):
@@ -77,6 +85,28 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
             print(f"✅ Created new group '{group.name}' automatically")
             return group
     
+    def validate(self, data):
+        group = self.validate_group(data.get('group'))
+        card_number = data.get('card_number')
+
+        if group and card_number:
+            if Member.objects.filter(group=group, card_number=card_number).exists():
+                raise serializers.ValidationError(
+                    {"card_number": f"Card number '{card_number}' is already taken in group '{group.name}'."}
+                )
+        elif not group:
+             raise serializers.ValidationError(
+                    {"group": "Group is required for a member."}
+                )
+        
+        # Check for unique email globally (AbstractUser's default)
+        email = data.get('email')
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                {"email": "A user with that email already exists."}
+            )
+
+        return data
     
     def create(self, validated_data):
         print("🟡 STARTING MEMBER CREATION PROCESS")
@@ -88,6 +118,8 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
         address = validated_data.pop('address', '')
         group = validated_data.pop('group', None)
         passport_photo = validated_data.pop('passport', None)
+        card_number = validated_data.pop('card_number', None)
+        email = validated_data.pop('email')
         
         # Extract next of kin data (handle missing data)
         kin_first_name = validated_data.pop('kinName', '')
@@ -98,19 +130,7 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
         # paymentConfirmed is ignored - payment is always bypassed
         validated_data.pop('paymentConfirmed', True)
         
-        # Create user with unique username
-        base_username = f"{first_name.lower()}.{surname.lower()}"
-        username = base_username
-        counter = 1
-        
-        # Ensure username is unique
-        while User.objects.filter(username=username).exists():
-            username = f"{base_username}{counter}"
-            counter += 1
-        
-        email = f"{first_name.lower()}@irorunde.com"
-        
-      
+            
         username = phone
         password = surname
         
@@ -137,13 +157,12 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
                 phone=phone,
                 address=address,
                 membership_fee_paid=True,
-                status='active'
+                status='active',
+                card_number=card_number
             )
             
-        # Generate membership number
-        member.membership_number = f"IR{member.id:06d}"
-        member.save()
-        print(f"✅ SUCCESS: Created member: {member.membership_number} in group: {group}")
+       
+        print(f"✅ SUCCESS: Created member: {member.card_number} in group: {group.name}")
        
         
         # Create next of kin only if data is provided
@@ -178,6 +197,8 @@ class MemberRegistrationSerializer(serializers.ModelSerializer):
         return member
 
 class AdminMemberCreateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(write_only=True,)
+    card_number = serializers.CharField(write_only=True,)
     first_name = serializers.CharField(write_only=True)
     surname = serializers.CharField(write_only=True)
     phone = serializers.CharField()
@@ -192,9 +213,31 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Member
         fields = (
-            'first_name', 'surname', 'phone', 'address', 'passport',
+            'email', 'card_number','first_name', 'surname', 'phone', 'address', 'passport',
             'kinName', 'kinSurname', 'kinPhone', 'kinAddress'
         )
+    
+    def validate(self, data):
+        group_admin = self.context.get('group_admin')
+        if not group_admin or not group_admin.managed_group:
+             raise serializers.ValidationError("Admin context or managed group is missing.")
+             
+        group = group_admin.managed_group
+        card_number = data.get('card_number')
+
+        if Member.objects.filter(group=group, card_number=card_number).exists():
+            raise serializers.ValidationError(
+                {"card_number": f"Card number '{card_number}' is already taken in your group '{group.name}'."}
+            )
+            
+        # Check for unique email globally (AbstractUser's default)
+        email = data.get('email')
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError(
+                {"email": "A user with that email already exists."}
+            )
+
+        return data
 
     @db_transaction.atomic
     def create(self, validated_data):
@@ -208,6 +251,8 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
         phone = validated_data.pop('phone')
         address = validated_data.pop('address', '')
         passport = validated_data.pop('passport', None)
+        card_number = validated_data.pop('card_number', None)
+        email = validated_data.pop('email')
 
         kin_first_name = validated_data.pop('kinName', '')
         kin_surname = validated_data.pop('kinSurname', '')
@@ -220,7 +265,7 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
         # Create User with hashed password
         user = User.objects.create(
             username=username,
-            email=f"{first_name.lower()}@irorunde.com",
+            email=email,
             first_name=first_name,
             last_name=surname,
             phone=phone,
@@ -236,12 +281,11 @@ class AdminMemberCreateSerializer(serializers.ModelSerializer):
             phone=phone,
             address=address,
             membership_fee_paid=True,
-            status='active'
+            status='active',
+            card_number=card_number
         )
 
-        member.membership_number = f"IR{member.id:06d}"
-        member.save()
-
+    
         if kin_first_name and kin_surname:
             NextOfKin.objects.create(
                 member=member,
@@ -276,7 +320,7 @@ class MemberLoginSerializer(serializers.Serializer):
             print(f"Looking for member with phone: {phone} and surname: {surname}")
             # Find member by phone and surname (case-insensitive)
             member = Member.objects.select_related('user').get(phone=phone, user__last_name__iexact=surname)
-            print(f"Member found: {member.membership_number}")
+            print(f"Member found: {member.card_number}")
             
             if not member.user.is_active:
                 raise serializers.ValidationError("Account is disabled. Please contact administrator.")
@@ -298,11 +342,11 @@ class ContributionPlanSerializer(serializers.ModelSerializer):
 
 class TransactionSerializer(serializers.ModelSerializer):
     member_name = serializers.CharField(source='member.user.get_full_name', read_only=True)
-    membership_number = serializers.CharField(source='member.membership_number', read_only=True)
+    card_number = serializers.CharField(source='member.card_number', read_only=True)
     
     class Meta:
         model = Transaction
-        fields = '__all__'
+        fields = ('id', 'member', 'card_number', 'transaction_type', 'amount', 'description', 'status', 'transaction_date', 'reference', 'member_name')
 
 class MemberContributionSerializer(serializers.ModelSerializer):
     plan_name = serializers.CharField(source='plan.name', read_only=True)

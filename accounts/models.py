@@ -111,7 +111,8 @@ class Member(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='member_profile')
     group = models.ForeignKey(CooperativeGroup, on_delete=models.SET_NULL, null=True, blank=True)
     passport_photo = models.ImageField(upload_to='passports/', null=True, blank=True)
-    
+    card_number = models.CharField(max_length=50)  # Required field
+
     phone_regex = RegexValidator(
         regex=r'^\+?1?\d{9,15}$',
         message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
@@ -120,33 +121,19 @@ class Member(models.Model):
     address = models.TextField()
     registration_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
-    membership_fee_paid = models.BooleanField(default=True)
-    membership_number = models.CharField(max_length=20, unique=True, blank=True, null=True)
-    
+    membership_fee_paid = models.BooleanField(default=True)    
     class Meta:
         ordering = ['-registration_date']
         verbose_name = "Member"
         verbose_name_plural = "Members"
+        unique_together = ('group', 'card_number')
     
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name}"
     
     def save(self, *args, **kwargs):
-        if not self.membership_number:
-            # Generate membership number
-            year = timezone.now().year
-            last_member = Member.objects.filter(
-                membership_number__startswith=f'MEM{year}'
-            ).order_by('membership_number').last()
-            
-            if last_member:
-                last_number = int(last_member.membership_number[7:])
-                new_number = last_number + 1
-            else:
-                new_number = 1
-                
-            self.membership_number = f"MEM{year}{new_number:04d}"
-        
+        # NOTE: You must ensure 'group' and 'card_number' are set before calling save()
+        # The uniqueness check is now handled by the 'unique_together' Meta option.
         super().save(*args, **kwargs)
     
     @property
@@ -188,6 +175,7 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=20300.00)
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='bypassed')
 
+    card_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="Card Number (Group Specific)", help_text="Card number assigned by the cooperative group.")
     # Flutterwave & Paystack fields
     flutterwave_reference = models.CharField(max_length=100, blank=True, null=True)
     flutterwave_transaction_id = models.CharField(max_length=100, blank=True, null=True)
@@ -203,8 +191,15 @@ class Payment(models.Model):
         verbose_name_plural = "Payments"
     
     def __str__(self):
-        return f"Payment #{self.id} - {self.member.full_name} - ₦{self.amount}"
+        return f"Payment #{self.card_number} - {self.member.full_name} - ₦{self.amount}"
     
+    def save(self, *args, **kwargs):
+        # 🌟 AUTOMATICALLY SET REFERENCE: Populate the card_number_reference before saving
+        if not self.card_number_reference and self.member and self.member.card_number:
+            self.card_number_reference = self.member.card_number
+            
+        super().save(*args, **kwargs)
+
     @property
     def payment_status(self):
         return "Successful" if self.is_successful else "Failed"
@@ -289,4 +284,4 @@ class MemberContribution(models.Model):
         verbose_name_plural = "Member Contributions"
     
     def __str__(self):
-        return f"{self.member.membership_number} - Week {self.week_number} - ₦{self.amount_paid}"
+        return f"{self.member.card_number} - Week {self.week_number} - ₦{self.amount_paid}"

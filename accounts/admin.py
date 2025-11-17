@@ -91,7 +91,7 @@ class CustomUserAdmin(UserAdmin):
 @admin.register(Member)
 class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = (
-        'membership_number', 
+        'card_number', 
         'get_user_full_name', 
         'get_group_name',
         'phone', 
@@ -104,12 +104,12 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     search_fields = (
         'user__first_name', 
         'user__last_name', 
-        'membership_number', 
+        'card_number', 
         'phone',
         'user__email',
         'group__name'
     )
-    readonly_fields = ('registration_date', 'passport_photo_preview', 'membership_number')
+    readonly_fields = ('registration_date', 'passport_photo_preview', 'card_number')
     list_select_related = ('user', 'group')
     list_per_page = 20
     actions = [activate_members, deactivate_members, mark_payment_paid]
@@ -118,7 +118,7 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         ('Basic Information', {
             'fields': (
                 'user', 
-                'membership_number', 
+                'card_number', 
                 'group',
                 'status',
                 'registration_date'
@@ -215,7 +215,7 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     search_fields = (
         'member__user__first_name',
         'member__user__last_name',
-        'member__membership_number',
+        'member__card_number',
         'paystack_reference',
         'member__group__name'
     )
@@ -296,7 +296,7 @@ class ContributionPlanAdmin(admin.ModelAdmin):
 class TransactionAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = ('reference', 'get_member_name', 'get_member_group', 'transaction_type', 'amount', 'status', 'transaction_date')
     list_filter = ('transaction_type', 'status', 'transaction_date')
-    search_fields = ('reference', 'member__user__first_name', 'member__user__last_name', 'member__membership_number', 'member__group__name')
+    search_fields = ('reference', 'member__user__first_name', 'member__user__last_name', 'member__card_number', 'member__group__name')
     readonly_fields = ('transaction_date',)
     list_select_related = ('member__user', 'member__group')
     
@@ -312,7 +312,7 @@ class TransactionAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
 class MemberContributionAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
     list_display = ('get_member_name', 'get_member_group', 'plan', 'amount_paid', 'year', 'payment_date')
     list_filter = ('plan', 'year', 'payment_date')
-    search_fields = ('member__user__first_name', 'member__user__last_name', 'member__membership_number', 'member__group__name')
+    search_fields = ('member__user__first_name', 'member__user__last_name', 'member__card_number', 'member__group__name')
     list_select_related = ('member__user', 'member__group', 'plan')
     
     def get_member_name(self, obj):

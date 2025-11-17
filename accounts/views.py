@@ -175,7 +175,7 @@ class MemberDashboardView(APIView):
             dashboard_data = {
                 'member_info': {
                     'name': f"{request.user.first_name} {request.user.last_name}",
-                    'membership_number': member.membership_number,
+                    'card_number': member.card_number,
                     'group': member.group.name if member.group else 'No Group',
                     'group_id': member.group.id if member.group else None,  # ✅ Add this line
                     'status': member.status,
@@ -375,7 +375,7 @@ class RegisterMemberView(APIView):
                     {
                         "message": "Member registered successfully",
                         "member_id": member.id,
-                        "membership_number": member.membership_number,
+                        "card_number": member.card_number,
                         "group": str(member.group) if member.group else None,
                     },
                     status=status.HTTP_201_CREATED
@@ -435,7 +435,7 @@ class MemberLoginView(APIView):
             'role': user.role,
             'user_id': user.id,
             'phone': user.phone,
-            'membership_number': member.membership_number,
+            'card_number': member.card_number,
             'member_id': member.id,
             'group': member.group.name if member.group else 'No Group',
             'status': member.status,
@@ -465,7 +465,7 @@ class CreateMemberView(APIView):
                 return Response({
                     'message': 'Member created successfully!',
                     'member_id': member.id,
-                    'membership_number': member.membership_number,
+                    'card_number': member.card_number,
                     'status': 'active'
                 }, status=status.HTTP_201_CREATED)
                 
@@ -506,7 +506,7 @@ def get_current_user(request):
         'phone': user.phone,
         'user_id': user.id,
         'group': member.group.name if member and member.group else None,
-        'membership_number': member.membership_number if member else None,
+        'card_number': member.card_number if member else None,
         'status': member.status if member else None,
     }
     
@@ -777,9 +777,9 @@ def group_admin_members(request):
             },
             'phone': member.phone,
             'status': member.status,
-            'membership_number': member.membership_number,
+            'card_number': member.card_number,
             'registration_date': member.registration_date.isoformat(),
-        })
+            'email': member.user.email,       })
     
     return Response(member_data)
     
@@ -802,7 +802,7 @@ class GroupAdminCreateMemberView(APIView):
             member = serializer.save()
             return Response({
                 "detail": "Member created successfully",
-                "membership_number": member.membership_number,
+                "card_number": member.card_number,
                 "phone": member.phone
             }, status=status.HTTP_201_CREATED)
         
@@ -837,6 +837,7 @@ def initialize_flutterwave_payment(request):
     name = request.data.get("name") or (f"{user.first_name} {user.last_name}" if user else "Guest User")
     email = request.data.get("email") or (user.email if user and user.email else f"guest_{datetime.now().strftime('%Y%m%d%H%M%S')}@irorunde.local")
     phone = request.data.get("phone")
+    card_number = request.data.get("card_number")
 
     # ✅ Basic Validation
     if not amount:
@@ -850,7 +851,7 @@ def initialize_flutterwave_payment(request):
     if payment_type == "contribution" and amount < 1100:
         return Response({"error": "Minimum contribution amount is ₦1,100"}, status=400)
 
-    tx_ref = f"IROR-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    tx_ref = f"IROR-{card_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
     payload = {
         "tx_ref": tx_ref,
@@ -868,6 +869,7 @@ def initialize_flutterwave_payment(request):
             "user_id": user.id if user else None,
             "name": name,
             "phone": phone,
+            "card_number": card_number,
         },
         "customizations": {
             "title": "Irorunde Cooperative Payment",
