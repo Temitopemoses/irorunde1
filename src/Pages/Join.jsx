@@ -16,6 +16,8 @@ const Join = ({ userRole = "member", token = null }) => {
     surname: "",
     phone: "",
     address: "",
+    email: "",
+    card_number: "",
     kinName: "",
     kinSurname: "",
     kinPhone: "",
@@ -113,7 +115,7 @@ const handleFlutterPayment = async () => {
     const payload = {
       group_id: formData.group,
       amount: 20300, // membership fee
-      email: `${formData.first_name.toLowerCase()}@irorunde.com`,
+      email: formData.email,
       name: `${formData.first_name} ${formData.surname}`,
       phone: formData.phone,
     };
@@ -228,6 +230,8 @@ const handleFlutterPayment = async () => {
         setIsPaymentDone(false);
         setTxRef(null);
         setFormData({
+          card_number: "",
+          email: "",
           group: "",
           passport: null,
           first_name: "",

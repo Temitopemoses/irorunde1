@@ -51,22 +51,19 @@ const GroupAdminDashboard = () => {
       if (membersResponse.ok) {
         membersData = await membersResponse.json();
       } else {
-        console.warn('Failed to fetch /members/, trying alternative endpoints...');
+        console.warn('Failed to fetch members, trying alternative endpoints...');
         membersData = await tryAlternativeEndpoints(token);
       }
 
-      const formattedMembers = (Array.isArray(membersData) ? membersData :
-        membersData.results ? membersData.results :
-        membersData.members ? membersData.members : []
-      ).map(member => ({
+      const formattedMembers = (Array.isArray(membersData) ? membersData : []).map(member => ({
         id: member.id,
-        first_name: member.user?.first_name || member.first_name,
-        last_name: member.user?.last_name || member.last_name || member.surname,
+        first_name: member.first_name,
+        last_name: member.last_name,
         phone: member.phone,
-        join_date: member.registration_date || member.join_date,
-        status: member.status || 'active',
-        membership_number: member.membership_number,
-        email: member.user?.email || member.email,
+        join_date: member.join_date,
+        status: member.status,
+        card_number: member.card_number, // Using card_number instead of membership_number
+        email: member.email,
         address: member.address
       }));
 
@@ -84,11 +81,10 @@ const GroupAdminDashboard = () => {
     }
   };
 
-  // ✅ FIXED: Correct API endpoint
   const fetchContributions = async () => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`${API_BASE}/api/payment-history/`, {
+      const response = await fetch(`${API_BASE}/payment-history/`, {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
 
@@ -98,10 +94,10 @@ const GroupAdminDashboard = () => {
         
         const formatted = Array.isArray(data) ? data.map(c => ({
           id: c.id,
-          member_name: `${c.member?.user?.first_name || ''} ${c.member?.user?.last_name || ''}`.trim() || 'Unknown Member',
-          membership_number: c.member?.membership_number || 'N/A',
+          member_name: c.member_name,
+          card_number: c.card_number, // Using card_number instead of membership_number
           amount: c.amount || 0,
-          date: c.date || c.created_at,
+          date: c.date,
           payment_type: c.payment_type || 'contribution'
         })) : [];
         
@@ -139,7 +135,6 @@ const GroupAdminDashboard = () => {
     }
   };
 
-  // ✅ ADDED: Missing function
   const tryAlternativeEndpoints = async (token) => {
     const endpoints = [
       `${API_BASE}/accounts/members/`,
@@ -170,6 +165,8 @@ const GroupAdminDashboard = () => {
   const handleAddMember = async (formData) => {
     const token = localStorage.getItem('token');
     const memberData = new FormData();
+    
+    // Append all form fields - card_number is now required
     Object.keys(formData).forEach(key => { 
       if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
         memberData.append(key, formData[key]);
@@ -185,7 +182,7 @@ const GroupAdminDashboard = () => {
 
       if (response.ok) {
         await fetchDashboardData();
-        showNotification(`Member ${formData.first_name} added successfully!`);
+        showNotification(`Member ${formData.first_name} with card ${formData.card_number} added successfully!`);
         setShowModal(false);
       } else {
         const errorData = await response.json();
@@ -294,7 +291,7 @@ const GroupAdminDashboard = () => {
   );
 };
 
-// Overview Tab Component
+// Overview Tab Component - Updated to show card numbers
 const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewMembers }) => {
   return (
     <div className="px-4 py-6">
@@ -385,7 +382,9 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
                       <p className="font-medium text-gray-900">
                         {member.first_name} {member.last_name}
                       </p>
-                      <p className="text-sm text-gray-500">{member.phone} {member.membership_number && `• ${member.membership_number}`}</p>
+                      <p className="text-sm text-gray-500">
+                        {member.phone} • Card: {member.card_number}
+                      </p>
                     </div>
                     <span className={`px-3 py-1 text-sm font-medium rounded-full ${
                       member.status === 'active' 
@@ -421,7 +420,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
                       <p className="font-medium text-gray-900 text-sm">
                         {payment.member_name}
                       </p>
-                      <p className="text-xs text-gray-500">{payment.membership_number}</p>
+                      <p className="text-xs text-gray-500">Card: {payment.card_number}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-green-600">
@@ -449,7 +448,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
   );
 };
 
-// Daily Payments Tab Component
+// Daily Payments Tab Component - Updated for card numbers
 const DailyPaymentsTab = ({ payments, onRefresh }) => {
   const today = new Date().toISOString().split('T')[0];
   const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -492,7 +491,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="font-semibold text-gray-900">{payment.member_name}</p>
-                      <p className="text-sm text-gray-600">{payment.membership_number}</p>
+                      <p className="text-sm text-gray-600">Card: {payment.card_number}</p>
                       <p className="text-xs text-gray-500 capitalize">{payment.payment_type}</p>
                     </div>
                     <div className="text-right">
@@ -514,7 +513,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
   );
 };
 
-// Members Tab Component
+// Members Tab Component - Updated for card numbers
 const MembersTab = ({ members, onRefresh }) => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -553,7 +552,7 @@ const MembersTab = ({ members, onRefresh }) => {
                       Name
                     </th>
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Membership No.
+                      Card Number
                     </th>
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Phone
@@ -573,7 +572,7 @@ const MembersTab = ({ members, onRefresh }) => {
                         {member.first_name} {member.last_name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.membership_number || 'Pending'}
+                        {member.card_number}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {member.phone}
@@ -606,7 +605,7 @@ const MembersTab = ({ members, onRefresh }) => {
   );
 };
 
-// Contributions Tab Component
+// Contributions Tab Component - Updated for card numbers
 const ContributionsTab = ({ contributions }) => {
   return (
     <div className="px-4 py-6">
@@ -623,7 +622,7 @@ const ContributionsTab = ({ contributions }) => {
                 <thead>
                   <tr>
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Member</th>
-                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Membership No.</th>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Card Number</th>
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                   </tr>
@@ -635,7 +634,7 @@ const ContributionsTab = ({ contributions }) => {
                         {c.member_name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {c.membership_number}
+                        {c.card_number}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         ₦{c.amount?.toLocaleString()}
@@ -657,7 +656,7 @@ const ContributionsTab = ({ contributions }) => {
   );
 };
 
-// Reports Tab Component
+// Reports Tab Component (unchanged)
 const ReportsTab = () => {
   return (
     <div className="px-4 py-6">
@@ -677,38 +676,58 @@ const ReportsTab = () => {
   );
 };
 
-// Add Member Modal Component
+// Add Member Modal Component - Updated with required card number
 const AddMemberModal = ({ onClose, onAddMember, user }) => {
   const [formData, setFormData] = useState({
     first_name: '',
     surname: '',
     phone: '',
     address: '',
-    group: user?.managed_group?.name || '',
+    email: '',
+    card_number: '', // Now required
+    passport: null,
     kinName: '',
     kinSurname: '',
     kinPhone: '',
     kinAddress: '',
-    paymentConfirmed: true
   });
 
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onAddMember(formData);
+    setIsSubmitting(true);
+    
+    try {
+      await onAddMember(formData);
+    } catch (error) {
+      console.error('Error in form submission:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value, type, files } = e.target;
+    
+    if (type === 'file') {
+      setFormData({
+        ...formData,
+        [name]: files[0] || null
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      });
+    }
   };
 
   const nextStep = () => {
-    if (!formData.first_name || !formData.surname || !formData.phone) {
-      alert('Please fill in all required fields');
+    // Card number is now required
+    if (!formData.first_name || !formData.surname || !formData.phone || !formData.card_number) {
+      alert('Please fill in all required fields including card number');
       return;
     }
     setStep(2);
@@ -719,13 +738,17 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center">
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
       <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-auto p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-900">
             Add New Member {step === 1 ? '(Basic Info)' : '(Next of Kin)'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button 
+            onClick={onClose} 
+            className="text-gray-400 hover:text-gray-600 text-2xl"
+            disabled={isSubmitting}
+          >
             &times;
           </button>
         </div>
@@ -734,13 +757,14 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Passport Photo</label>
+                <label className="block text-sm font-medium text-gray-700">Passport Photo (Optional)</label>
                 <input
                   type="file"
                   name="passport"
                   accept="image/*"
-                  onChange={(e) => setFormData({ ...formData, passport: e.target.files[0] })}
+                  onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -753,6 +777,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   required
+                  disabled={isSubmitting}
                 />
               </div>
               
@@ -765,6 +790,38 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   required
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Card Number *</label>
+                <input
+                  type="text"
+                  name="card_number"
+                  value={formData.card_number}
+                  onChange={handleChange}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  required
+                  disabled={isSubmitting}
+                  placeholder="e.g., 001, 002, etc."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Must be unique within your group
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email Address *</label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  required
+                  disabled={isSubmitting}
+                  placeholder="member@example.com"
                 />
               </div>
               
@@ -777,17 +834,19 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   required
+                  disabled={isSubmitting}
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700">Address</label>
+                <label className="block text-sm font-medium text-gray-700">Address (Optional)</label>
                 <textarea
                   name="address"
                   value={formData.address}
                   onChange={handleChange}
-                  rows="3"
+                  rows="2"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -795,14 +854,16 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md disabled:opacity-50"
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={nextStep}
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md"
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md disabled:opacity-50"
+                  disabled={isSubmitting}
                 >
                   Next
                 </button>
@@ -814,6 +875,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
             <div className="space-y-4">
               <div className="border-b pb-4">
                 <h4 className="font-medium text-gray-900">Next of Kin Information (Optional)</h4>
+                <p className="text-sm text-gray-500 mt-1">All fields are optional</p>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -825,6 +887,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                     value={formData.kinName}
                     onChange={handleChange}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    disabled={isSubmitting}
                   />
                 </div>
                 
@@ -836,6 +899,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                     value={formData.kinSurname}
                     onChange={handleChange}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
@@ -848,6 +912,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   value={formData.kinPhone}
                   onChange={handleChange}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={isSubmitting}
                 />
               </div>
               
@@ -857,8 +922,9 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   name="kinAddress"
                   value={formData.kinAddress}
                   onChange={handleChange}
-                  rows="3"
+                  rows="2"
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -866,15 +932,24 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                 <button
                   type="button"
                   onClick={prevStep}
-                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md"
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md disabled:opacity-50"
+                  disabled={isSubmitting}
                 >
                   Back
                 </button>
                 <button
                   type="submit"
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md"
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md disabled:opacity-50 flex items-center"
+                  disabled={isSubmitting}
                 >
-                  Add Member
+                  {isSubmitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Adding...
+                    </>
+                  ) : (
+                    'Add Member'
+                  )}
                 </button>
               </div>
             </div>
@@ -885,7 +960,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
   );
 };
 
-// Notification Component
+// Notification Component (unchanged)
 const Notification = ({ message, type }) => (
   <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
     type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
