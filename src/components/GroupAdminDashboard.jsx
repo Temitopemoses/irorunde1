@@ -162,42 +162,56 @@ const GroupAdminDashboard = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
+  const handleAddMember = async (formData) => {
+      const token = localStorage.getItem('token');
+      const memberData = new FormData();
+      
+      // Append all form fields...
+      Object.keys(formData).forEach(key => { 
+        if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
+          memberData.append(key, formData[key]);
+        }
+      });
 
-  const handleAddMember = async (formData) => {
-    const token = localStorage.getItem('token');
-    const memberData = new FormData();
-    
-    // Append all form fields - card_number is now required
-    Object.keys(formData).forEach(key => { 
-      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
-        memberData.append(key, formData[key]);
-      }
-    });
+      try {
+        const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: memberData
+        });
 
-    try {
-      const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
-        method: 'POST',
-        headers: { 
-          Authorization: `Bearer ${token}`, 
-          // !!! REMOVE THIS LINE: 'Content-Type': 'application/json' 
-        },
-        body: memberData // The browser will set the correct Content-Type: multipart/form-data
-      });
+        if (response.ok) {
+          await fetchDashboardData();
+          showNotification(`Member ${formData.first_name} with card ${formData.card_number} added successfully!`);
+          setShowModal(false);
+        } else {
+            // --- BEGIN MODIFIED ERROR HANDLING ---
+          let errorMessage = 'Unknown error';
+            
+            try {
+                // 1. Try to parse as JSON (for clean API errors)
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.error || JSON.stringify(errorData);
 
-
-      if (response.ok) {
-        await fetchDashboardData();
-        showNotification(`Member ${formData.first_name} with card ${formData.card_number} added successfully!`);
-        setShowModal(false);
-      } else {
-        const errorData = await response.json();
-        showNotification(`Failed to add member: ${errorData.error || 'Unknown error'}`, 'error');
-      }
-    } catch (error) {
-      console.error('Error adding member:', error);
-      showNotification('Error adding member', 'error');
-    }
-  };
+            } catch (e) {
+                // 2. If JSON fails (due to 500 HTML page), read as text
+                if (response.status === 500) {
+                    errorMessage = `Server Error (500): Check backend logs for full details.`;
+                } else {
+                    // Fallback for other non-JSON errors
+                    errorMessage = `Status ${response.status}: Failed to parse error details.`;
+                }
+                console.error('Failed to parse response body, status:', response.status);
+            }
+            
+          showNotification(`Failed to add member: ${errorMessage}`, 'error');
+            // --- END MODIFIED ERROR HANDLING ---
+        }
+      } catch (error) {
+        console.error('Error adding member:', error);
+        showNotification('A network or CORS error occurred while adding member', 'error');
+      }
+    };
 
   const handleLogout = () => {
     ['token', 'refreshToken', 'user', 'userData'].forEach(key => localStorage.removeItem(key));
