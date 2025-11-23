@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { getCSRFToken } from "../utils/csrf"; // Utility function to get CSRF token from cookies
+import { getCSRFToken } from "../utils/csrf";
 
 const LoginPage = () => {
   const [phone, setPhone] = useState("");
   const [surname, setSurname] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [loginType, setLoginType] = useState("member"); // "member" or "group_admin"
+  const [loginType, setLoginType] = useState("member");
   const [loading, setLoading] = useState(false);
 
   const handleMemberLogin = async (e) => {
@@ -15,11 +15,10 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/member-login/", {
+      const response = await fetch("http://127.0.0.1:8000/api/auth/member-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          
         },
         body: JSON.stringify({ 
           phone: phone.trim(), 
@@ -28,22 +27,45 @@ const LoginPage = () => {
       });
 
       const data = await response.json();
+      console.log("Member login response:", data);
 
       if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || data.detail || "Login failed");
+      }
+
+      // Check if member is approved
+      if (data.user && data.user.status !== 'approved') {
+        throw new Error("Your account is pending approval. Please wait for admin confirmation.");
+      }
+
+      // FIXED: Handle both response formats
+      const accessToken = data.access || data.token;
+      const refreshToken = data.refresh;
+      const userData = data.user || data;
+
+      if (!accessToken) {
+        throw new Error("No access token received from server");
       }
 
       // Save tokens and user data
-      localStorage.setItem("accessToken", data.access);
-      localStorage.setItem("refreshToken", data.refresh);
-      localStorage.setItem("userData", JSON.stringify(data));
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken || "");
+      localStorage.setItem("userData", JSON.stringify(userData));
+      localStorage.setItem("userRole", userData.role || 'member');
 
-      alert(`Welcome back, ${data.first_name} ${data.last_name}!`);
+      console.log("Login successful, stored data:", {
+        accessToken: localStorage.getItem("accessToken"),
+        userData: localStorage.getItem("userData"),
+        userRole: localStorage.getItem("userRole")
+      });
+
+      alert(`Welcome back, ${userData.first_name} ${userData.last_name}!`);
       
       // REDIRECT TO MEMBER DASHBOARD
       window.location.href = "/member-dashboard";
 
     } catch (err) {
+      console.error("Member login error:", err);
       alert(err.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
@@ -56,15 +78,19 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      await fetch("https://irorunde1-production.up.railway.app/api/csrf/", { credentials: "include" });
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/accounts/login/", {
+      // Get CSRF token first
+      const csrfResponse = await fetch("http://127.0.0.1:8000/api/auth/csrf/", { 
+        credentials: "include" 
+      });
+      console.log("CSRF response:", csrfResponse);
+      
+      const response = await fetch("http://127.0.0.1:8000/api/auth/group-admin-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "X-CSRFToken": getCSRFToken(), // make sure you include CSRF token
-
+          "X-CSRFToken": getCSRFToken(),
         },
-        credentials: "include", // include cookies in the request
+        credentials: "include",
         body: JSON.stringify({ 
           username: username.trim(), 
           password: password.trim() 
@@ -72,26 +98,119 @@ const LoginPage = () => {
       });
 
       const data = await response.json();
+      console.log("Group admin login response:", data);
 
       if (!response.ok) {
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || data.detail || "Login failed");
       }
 
       // Check if user is actually a group admin
-      if (data.user.role !== 'group_admin') {
+      const userRole = data.user?.role || data.role;
+      if (userRole !== 'group_admin') {
         throw new Error("Access denied. Group admin access only.");
       }
 
-      // Save tokens and user data
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // FIXED: Handle both response formats
+      const accessToken = data.access || data.token;
+      const refreshToken = data.refresh;
+      const userData = data.user || data;
 
-      alert(`Welcome back, ${data.user.first_name} ${data.user.last_name}!`);
+      if (!accessToken) {
+        throw new Error("No access token received from server");
+      }
+
+      // Save tokens and user data
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken || "");
+      localStorage.setItem("userData", JSON.stringify(userData));
+      localStorage.setItem("userRole", userData.role || 'group_admin');
+
+      console.log("Group admin login successful, stored data:", {
+        accessToken: localStorage.getItem("accessToken"),
+        userData: localStorage.getItem("userData"),
+        userRole: localStorage.getItem("userRole")
+      });
+
+      alert(`Welcome back, ${userData.first_name} ${userData.last_name}!`);
       
       // REDIRECT TO GROUP ADMIN DASHBOARD
+      console.log("Redirecting to group admin dashboard...");
       window.location.href = "/group-admin/dashboard";
 
     } catch (err) {
+      console.error("Group admin login error:", err);
+      alert(err.message || "Login failed. Please check your credentials.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSuperAdminLogin = async (e) => {
+    e.preventDefault();
+    if (!username || !password) return alert("Please fill in both username and password");
+
+    setLoading(true);
+    try {
+      // Get CSRF token first
+      await fetch("http://127.0.0.1:8000/api/auth/csrf/", { 
+        credentials: "include" 
+      });
+      
+      const response = await fetch("http://127.0.0.1:8000/api/auth/superadmin-login/", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCSRFToken(),
+        },
+        credentials: "include",
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password: password.trim() 
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Super admin login response:", data);
+
+      if (!response.ok) {
+        throw new Error(data.error || data.detail || "Login failed");
+      }
+
+      // Check if user is actually a super admin
+      const userRole = data.user?.role || data.role;
+      if (userRole !== 'superadmin') {
+        throw new Error("Access denied. Super admin access only.");
+      }
+
+      // FIXED: Handle both response formats
+      const accessToken = data.access || data.token;
+      const refreshToken = data.refresh;
+      const userData = data.user || data;
+
+      if (!accessToken) {
+        throw new Error("No access token received from server");
+      }
+
+      // Save tokens and user data
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken || "");
+      localStorage.setItem("userData", JSON.stringify(userData));
+      localStorage.setItem("userRole", userData.role || 'superadmin');
+
+      console.log("Super admin login successful, stored data:", {
+        accessToken: localStorage.getItem("accessToken"),
+        userData: localStorage.getItem("userData"),
+        userRole: localStorage.getItem("userRole")
+      });
+
+      alert(`Welcome back, ${userData.first_name} ${userData.last_name}!`);
+      
+      // REDIRECT TO SUPER ADMIN DASHBOARD
+      console.log("Redirecting to super admin dashboard...");
+      window.location.href = "/super-admin/dashboard";
+
+    } catch (err) {
+      console.error("Super admin login error:", err);
       alert(err.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
@@ -101,8 +220,10 @@ const LoginPage = () => {
   const handleSubmit = (e) => {
     if (loginType === "member") {
       handleMemberLogin(e);
-    } else {
+    } else if (loginType === "group_admin") {
       handleGroupAdminLogin(e);
+    } else {
+      handleSuperAdminLogin(e);
     }
   };
 
@@ -137,12 +258,14 @@ const LoginPage = () => {
           >
             Group Admin
           </button>
-        </div>
+         </div>
 
         <p className="text-sm text-gray-600 text-center mb-6">
           {loginType === "member" 
             ? "Use your registered phone number and surname to login" 
-            : "Use your username and password to access group admin dashboard"
+            : loginType === "group_admin"
+            ? "Use your username and password to access group admin dashboard"
+            : "Use your username and password to access super admin dashboard"
           }
         </p>
 
@@ -180,7 +303,7 @@ const LoginPage = () => {
             </>
           ) : (
             <>
-              {/* Group Admin Login Form */}
+              {/* Admin Login Form (Group Admin & Super Admin) */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Username *
@@ -216,7 +339,10 @@ const LoginPage = () => {
             disabled={loading}
             className="w-full bg-amber-600 text-white p-3 rounded-lg hover:bg-amber-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Logging in..." : `Login as ${loginType === "member" ? "Member" : "Group Admin"}`}
+            {loading ? "Logging in..." : 
+              loginType === "member" ? "Login as Member" : 
+              loginType === "group_admin" ? "Login as Group Admin" : 
+              "Login as Super Admin"}
           </button>
         </form>
 

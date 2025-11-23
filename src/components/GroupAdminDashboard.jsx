@@ -8,48 +8,69 @@ const GroupAdminDashboard = () => {
   const [recentMembers, setRecentMembers] = useState([]);
   const [contributions, setContributions] = useState([]);
   const [dailyPayments, setDailyPayments] = useState([]);
+  const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
-  const API_BASE = 'https://irorunde1-production.up.railway.app/api';
+  const API_BASE = 'http://127.0.0.1:8000/api/';
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
+    // FIXED: Use the correct localStorage keys from login
+    const userData = localStorage.getItem('userData');
+    const token = localStorage.getItem('accessToken');
+
+    console.log('Auth check - Token:', token);
+    console.log('Auth check - User data:', userData);
 
     if (!token || !userData) {
+      console.log('No auth data found, redirecting to login');
       navigate('/login');
       return;
     }
 
     try {
       const userObj = JSON.parse(userData);
-      if (userObj.role !== 'group_admin') {
+      console.log('Parsed user data:', userObj);
+      
+      // FIXED: Check role properly - handle different response formats
+      const userRole = userObj.role || userObj.user?.role;
+      if (userRole !== 'group_admin') {
+        console.log('User role is not group_admin, redirecting to login');
+        alert('Access denied. Group admin access only.');
         navigate('/login');
         return;
       }
+      
       setUser(userObj);
       fetchDashboardData();
       fetchContributions();
+      fetchPendingPayments();
     } catch (error) {
       console.error('Error parsing user data:', error);
       navigate('/login');
     }
   }, [navigate]);
 
+  // FIXED: Update all API calls to use accessToken instead of token
   const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const membersResponse = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
+      console.log('Fetching dashboard data with token:', token);
+      
+      const membersResponse = await fetch(`${API_BASE}group-admin/members/`, {
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
       });
 
       let membersData = [];
       if (membersResponse.ok) {
         membersData = await membersResponse.json();
+        console.log('Members data:', membersData);
       } else {
         console.warn('Failed to fetch members, trying alternative endpoints...');
         membersData = await tryAlternativeEndpoints(token);
@@ -62,7 +83,7 @@ const GroupAdminDashboard = () => {
         phone: member.phone,
         join_date: member.join_date,
         status: member.status,
-        card_number: member.card_number, // Using card_number instead of membership_number
+        card_number: member.card_number,
         email: member.email,
         address: member.address
       }));
@@ -81,65 +102,291 @@ const GroupAdminDashboard = () => {
     }
   };
 
-  const fetchContributions = async () => {
-    const token = localStorage.getItem('token');
+  // FIXED: Use accessToken and correct endpoints
+ // FIXED: Use accessToken and correct endpoints
+// FIXED: Enhanced debug version to find calculation issues
+const fetchContributions = async () => {
+  const token = localStorage.getItem('accessToken');
+  try {
+    console.log('Fetching contributions with token:', token);
+    
+    // Use group admin payments endpoint
+    const response = await fetch(`${API_BASE}admin/manual-payments/`, {
+      headers: { 
+        Authorization: `Bearer ${token}`, 
+        'Content-Type': 'application/json' 
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("✅ RAW API RESPONSE:", data);
+      
+      const formatted = Array.isArray(data) ? data.map(payment => ({
+        id: payment.id,
+        member_name: payment.member_name || `${payment.member?.first_name} ${payment.member?.last_name}` || 'Unknown Member',
+        card_number: payment.member_card_number || payment.member?.card_number || 'N/A',
+        amount: parseFloat(payment.amount) || 0, // Ensure it's a number
+        
+        // FIXED: Use the properly formatted date and time from the API
+        date: payment.date || payment.transfer_date || payment.created_at,
+        time: payment.time, // Use the formatted time from the serializer
+        
+        payment_type: payment.payment_type || 'contribution',
+        status: payment.status,
+        bank_name: payment.bank_name,
+        transaction_reference: payment.transaction_reference,
+        
+        // Keep original for debugging
+        created_at: payment.created_at,
+        transfer_date: payment.transfer_date
+      })) : [];
+      
+      console.log("📋 FORMATTED PAYMENTS WITH TIME:", formatted);
+      setContributions(formatted);
+
+      // FIXED: Enhanced debugging for payment calculations
+      const debugPaymentCalculations = (payments) => {
+        console.log("🔍 STARTING PAYMENT CALCULATIONS DEBUG");
+        
+        const today = new Date();
+        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+        
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        const monthStart = new Date(currentYear, currentMonth, 1);
+        const monthEnd = new Date(currentYear, currentMonth + 1, 1);
+
+        console.log("📅 DATE RANGES:", {
+          today: today.toISOString(),
+          todayStart: todayStart.toISOString(),
+          todayEnd: todayEnd.toISOString(),
+          monthStart: monthStart.toISOString(),
+          monthEnd: monthEnd.toISOString()
+        });
+
+        // Check all payments
+        payments.forEach((payment, index) => {
+          const paymentDate = payment.date ? new Date(payment.date) : null;
+          const isToday = paymentDate && paymentDate >= todayStart && paymentDate < todayEnd;
+          const isThisMonth = paymentDate && paymentDate >= monthStart && paymentDate < monthEnd;
+          const isConfirmed = payment.status === 'confirmed' || payment.status === 'completed';
+          
+          console.log(`Payment ${index + 1}:`, {
+            id: payment.id,
+            amount: payment.amount,
+            status: payment.status,
+            type: payment.payment_type,
+            date: payment.date,
+            time: payment.time, // Added time to debug log
+            parsedDate: paymentDate?.toISOString(),
+            isToday,
+            isThisMonth,
+            isConfirmed,
+            includedInTotals: isConfirmed
+          });
+        });
+
+        // Calculate confirmed payments
+        const confirmedPayments = payments.filter(payment => 
+          payment.status === 'confirmed' || payment.status === 'completed'
+        );
+        
+        console.log("✅ CONFIRMED PAYMENTS:", confirmedPayments);
+
+        // Calculate daily payments
+        const dailyPaymentsData = confirmedPayments.filter(payment => {
+          if (!payment.date) return false;
+          const paymentDate = new Date(payment.date);
+          return paymentDate >= todayStart && paymentDate < todayEnd;
+        });
+
+        console.log("📊 DAILY PAYMENTS:", dailyPaymentsData);
+
+        // Calculate totals
+        const totalContributions = confirmedPayments.reduce((sum, payment) => {
+          const amount = parseFloat(payment.amount) || 0;
+          console.log(`Adding to total: ${amount} from payment ${payment.id}`);
+          return sum + amount;
+        }, 0);
+        
+        const monthlyContributions = confirmedPayments
+          .filter(payment => {
+            if (!payment.date) return false;
+            const paymentDate = new Date(payment.date);
+            return paymentDate >= monthStart && paymentDate < monthEnd;
+          })
+          .reduce((sum, payment) => {
+            const amount = parseFloat(payment.amount) || 0;
+            console.log(`Adding to monthly: ${amount} from payment ${payment.id}`);
+            return sum + amount;
+          }, 0);
+        
+        const dailyContributions = dailyPaymentsData.reduce((sum, payment) => {
+          const amount = parseFloat(payment.amount) || 0;
+          console.log(`Adding to daily: ${amount} from payment ${payment.id}`);
+          return sum + amount;
+        }, 0);
+
+        console.log("🎯 FINAL CALCULATIONS:", {
+          totalConfirmedPayments: confirmedPayments.length,
+          totalContributions,
+          monthlyContributions,
+          dailyContributions,
+          dailyCount: dailyPaymentsData.length
+        });
+
+        return {
+          confirmedPayments,
+          dailyPaymentsData,
+          totalContributions,
+          monthlyContributions,
+          dailyContributions
+        };
+      };
+
+      // Run the debug calculations
+      const results = debugPaymentCalculations(formatted);
+
+      setDailyPayments(results.dailyPaymentsData);
+
+      setStats(prev => ({
+        ...prev,
+        total_contributions: results.totalContributions,
+        monthly_contributions: results.monthlyContributions,
+        daily_contributions: results.dailyContributions,
+        daily_count: results.dailyPaymentsData.length
+      }));
+
+    } else {
+      console.error('❌ Failed to fetch group admin payments:', response.status);
+      showNotification('Failed to load payment data', 'error');
+      setContributions([]);
+      setDailyPayments([]);
+    }
+  } catch (error) {
+    console.error('❌ Error fetching group admin payments:', error);
+    showNotification('Error loading payment data', 'error');
+    setContributions([]);
+    setDailyPayments([]);
+  }
+};
+  // FIXED: Fetch pending manual payments with accessToken
+  const fetchPendingPayments = async () => {
+    const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
     try {
-      const response = await fetch(`${API_BASE}/payment-history/`, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      console.log('Fetching pending payments with token:', token);
+      
+      const response = await fetch(`${API_BASE}admin/manual-payments/`, {
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log("✅ Contributions data loaded:", data);
+        console.log("✅ Pending payments data:", data);
         
-        const formatted = Array.isArray(data) ? data.map(c => ({
-          id: c.id,
-          member_name: c.member_name,
-          card_number: c.card_number, // Using card_number instead of membership_number
-          amount: c.amount || 0,
-          date: c.date,
-          payment_type: c.payment_type || 'contribution'
-        })) : [];
+        const pendingData = Array.isArray(data) ? data
+          .filter(payment => payment.status === 'pending')
+          .map(payment => ({
+            id: payment.id,
+            member_name: payment.member_name || `${payment.member?.first_name} ${payment.member?.last_name}` || 'Unknown Member',
+            member_card_number: payment.member_card_number || payment.member?.card_number || 'N/A',
+            amount: payment.amount || 0,
+            bank_name: payment.bank_name,
+            transaction_reference: payment.transaction_reference,
+            payment_type: payment.payment_type || 'contribution',
+            transfer_date: payment.transfer_date,
+            created_at: payment.created_at,
+            status: payment.status
+          })) : [];
         
-        setContributions(formatted);
-
-        // Calculate daily payments
-        const today = new Date().toISOString().split('T')[0];
-        const dailyPaymentsData = formatted.filter(c => 
-          c.date && c.date.toString().startsWith(today)
-        );
-        setDailyPayments(dailyPaymentsData);
-
-        const totalContributions = formatted.reduce((sum, c) => sum + (c.amount || 0), 0);
-        const currentMonth = new Date().getMonth();
-        const monthlyContributions = formatted
-          .filter(c => c.date && new Date(c.date).getMonth() === currentMonth)
-          .reduce((sum, c) => sum + (c.amount || 0), 0);
+        setPendingPayments(pendingData);
         
-        const dailyContributions = dailyPaymentsData.reduce((sum, c) => sum + (c.amount || 0), 0);
-
         setStats(prev => ({
           ...prev,
-          total_contributions: totalContributions,
-          monthly_contributions: monthlyContributions,
-          daily_contributions: dailyContributions,
-          daily_count: dailyPaymentsData.length
+          pending_payments: pendingData.length
         }));
       } else {
-        console.error('❌ Failed to fetch contributions:', response.status);
-        showNotification('Failed to load payment data', 'error');
+        console.error('❌ Failed to fetch pending payments:', response.status);
+        setPendingPayments([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching contributions:', error);
-      showNotification('Error loading payment data', 'error');
+      console.error('❌ Error fetching pending payments:', error);
+      setPendingPayments([]);
+    }
+  };
+
+  // FIXED: Confirm a manual payment with accessToken
+  const confirmPayment = async (paymentId) => {
+    const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
+    try {
+      console.log('Confirming payment with token:', token);
+      
+      const response = await fetch(`${API_BASE}admin/manual-payments/${paymentId}/confirm/`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
+      });
+
+      if (response.ok) {
+        showNotification('Payment confirmed successfully!', 'success');
+        fetchPendingPayments();
+        fetchContributions();
+        fetchDashboardData();
+      } else {
+        const errorData = await response.json();
+        showNotification(`Failed to confirm payment: ${errorData.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error confirming payment:', error);
+      showNotification('Error confirming payment', 'error');
+    }
+  };
+
+  // FIXED: Reject a manual payment with accessToken
+  const rejectPayment = async (paymentId) => {
+    const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
+    const reason = prompt('Please provide a reason for rejection:');
+    
+    if (!reason) {
+      showNotification('Rejection reason is required', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}admin/manual-payments/${paymentId}/reject/`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ admin_notes: reason })
+      });
+
+      if (response.ok) {
+        showNotification('Payment rejected successfully!', 'success');
+        fetchPendingPayments();
+      } else {
+        const errorData = await response.json();
+        showNotification(`Failed to reject payment: ${errorData.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error rejecting payment:', error);
+      showNotification('Error rejecting payment', 'error');
     }
   };
 
   const tryAlternativeEndpoints = async (token) => {
     const endpoints = [
-      `${API_BASE}/accounts/members/`,
-      `${API_BASE}/members/`,
-      `${API_BASE}/group-admin/members/`
+      `${API_BASE}accounts/members/`,
+      `${API_BASE}members/`,
+      `${API_BASE}group-admin/members/`
     ];
     
     for (const endpoint of endpoints) {
@@ -162,59 +409,52 @@ const GroupAdminDashboard = () => {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 3000);
   };
 
+  // FIXED: Handle add member with accessToken
   const handleAddMember = async (formData) => {
-      const token = localStorage.getItem('token');
-      const memberData = new FormData();
-      
-      // Append all form fields...
-      Object.keys(formData).forEach(key => { 
-        if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
-          memberData.append(key, formData[key]);
-        }
-      });
+    const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
+    const memberData = new FormData();
+    
+    Object.keys(formData).forEach(key => { 
+      if (formData[key] !== null && formData[key] !== undefined && formData[key] !== '') {
+        memberData.append(key, formData[key]);
+      }
+    });
 
-      try {
-        const response = await fetch(`${API_BASE}/accounts/group-admin/members/`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: memberData
-        });
+    try {
+      const response = await fetch(`${API_BASE}group-admin/members/create/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: memberData
+      });
 
-        if (response.ok) {
-          await fetchDashboardData();
-          showNotification(`Member ${formData.first_name} with card ${formData.card_number} added successfully!`);
-          setShowModal(false);
-        } else {
-            // --- BEGIN MODIFIED ERROR HANDLING ---
-          let errorMessage = 'Unknown error';
-            
-            try {
-                // 1. Try to parse as JSON (for clean API errors)
-                const errorData = await response.json();
-                errorMessage = errorData.detail || errorData.error || JSON.stringify(errorData);
+      if (response.ok) {
+        await fetchDashboardData();
+        showNotification(`Member ${formData.first_name} with card ${formData.card_number} added successfully!`);
+        setShowModal(false);
+      } else {
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.error || JSON.stringify(errorData);
+        } catch (e) {
+          if (response.status === 500) {
+            errorMessage = `Server Error (500): Check backend logs for full details.`;
+          } else {
+            errorMessage = `Status ${response.status}: Failed to parse error details.`;
+          }
+          console.error('Failed to parse response body, status:', response.status);
+        }
+        showNotification(`Failed to add member: ${errorMessage}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error adding member:', error);
+      showNotification('A network or CORS error occurred while adding member', 'error');
+    }
+  };
 
-            } catch (e) {
-                // 2. If JSON fails (due to 500 HTML page), read as text
-                if (response.status === 500) {
-                    errorMessage = `Server Error (500): Check backend logs for full details.`;
-                } else {
-                    // Fallback for other non-JSON errors
-                    errorMessage = `Status ${response.status}: Failed to parse error details.`;
-                }
-                console.error('Failed to parse response body, status:', response.status);
-            }
-            
-          showNotification(`Failed to add member: ${errorMessage}`, 'error');
-            // --- END MODIFIED ERROR HANDLING ---
-        }
-      } catch (error) {
-        console.error('Error adding member:', error);
-        showNotification('A network or CORS error occurred while adding member', 'error');
-      }
-    };
-
+  // FIXED: Logout - remove all storage keys used by login
   const handleLogout = () => {
-    ['token', 'refreshToken', 'user', 'userData'].forEach(key => localStorage.removeItem(key));
+    ['accessToken', 'refreshToken', 'userData', 'userRole'].forEach(key => localStorage.removeItem(key));
     navigate('/login');
   };
 
@@ -222,7 +462,7 @@ const GroupAdminDashboard = () => {
 
   const handleRefreshData = () => {
     setLoading(true);
-    Promise.all([fetchDashboardData(), fetchContributions()])
+    Promise.all([fetchDashboardData(), fetchContributions(), fetchPendingPayments()])
       .finally(() => setLoading(false));
   };
 
@@ -259,11 +499,12 @@ const GroupAdminDashboard = () => {
         </div>
       </header>
 
+      {/* Rest of the component remains the same */}
       {/* Navigation Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8">
-            {['overview', 'members', 'contributions', 'daily-payments', 'reports'].map(tab => (
+            {['overview', 'members', 'contributions', 'daily-payments', 'pending-payments', 'reports'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -272,6 +513,11 @@ const GroupAdminDashboard = () => {
                 }`}
               >
                 {tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                {tab === 'pending-payments' && pendingPayments.length > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">
+                    {pendingPayments.length}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -285,8 +531,11 @@ const GroupAdminDashboard = () => {
             stats={stats} 
             recentMembers={recentMembers} 
             dailyPayments={dailyPayments}
+            pendingPayments={pendingPayments}
             onAddMember={() => setShowModal(true)} 
-            onViewMembers={handleViewAllMembers} 
+            onViewMembers={handleViewAllMembers}
+            onConfirmPayment={confirmPayment}
+            onRejectPayment={rejectPayment}
           />
         )}
         {activeTab === 'members' && (
@@ -301,6 +550,14 @@ const GroupAdminDashboard = () => {
         {activeTab === 'daily-payments' && (
           <DailyPaymentsTab payments={dailyPayments} onRefresh={handleRefreshData} />
         )}
+        {activeTab === 'pending-payments' && (
+          <PendingPaymentsTab 
+            payments={pendingPayments} 
+            onConfirm={confirmPayment}
+            onReject={rejectPayment}
+            onRefresh={fetchPendingPayments}
+          />
+        )}
         {activeTab === 'reports' && <ReportsTab />}
       </main>
 
@@ -310,12 +567,13 @@ const GroupAdminDashboard = () => {
   );
 };
 
-// Overview Tab Component - Updated to show card numbers
-const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewMembers }) => {
+
+// Updated Overview Tab Component with Pending Payments Section
+const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onAddMember, onViewMembers, onConfirmPayment, onRejectPayment }) => {
   return (
     <div className="px-4 py-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+      {/* Stats Grid - Updated with Pending Payments */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-6 mb-8">
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <dt className="text-sm font-medium text-gray-500 truncate">Total Members</dt>
@@ -360,6 +618,19 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
             </dd>
             <dd className="text-sm text-gray-500 mt-1">
               {stats.daily_count || 0} transactions
+            </dd>
+          </div>
+        </div>
+
+        {/* NEW: Pending Payments Stat */}
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <dt className="text-sm font-medium text-gray-500 truncate">Pending Confirmations</dt>
+            <dd className="mt-1 text-3xl font-semibold text-yellow-600">
+              {stats.pending_payments || 0}
+            </dd>
+            <dd className="text-sm text-gray-500 mt-1">
+              Awaiting action
             </dd>
           </div>
         </div>
@@ -423,42 +694,64 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
           </div>
         </div>
 
-        {/* Today's Payments */}
+        {/* Pending Payments - NEW */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
-              Today's Payments
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg leading-6 font-medium text-gray-900">
+                Pending Payment Confirmations
+              </h3>
+              {pendingPayments.length > 0 && (
+                <span className="bg-yellow-100 text-yellow-800 text-sm font-medium px-3 py-1 rounded-full">
+                  {pendingPayments.length} pending
+                </span>
+              )}
+            </div>
           </div>
           <div className="px-4 py-5 sm:p-6">
-            {dailyPayments.length > 0 ? (
-              <div className="space-y-3">
-                {dailyPayments.slice(0, 5).map((payment) => (
-                  <div key={payment.id} className="flex items-center justify-between py-2 border-b border-gray-100">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">
-                        {payment.member_name}
-                      </p>
-                      <p className="text-xs text-gray-500">Card: {payment.card_number}</p>
+            {pendingPayments.length > 0 ? (
+              <div className="space-y-4">
+                {pendingPayments.slice(0, 3).map((payment) => (
+                  <div key={payment.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{payment.member_name}</h4>
+                        <p className="text-sm text-gray-600">Card: {payment.member_card_number}</p>
+                        <p className="text-lg font-semibold text-green-600">₦{payment.amount?.toLocaleString()}</p>
+                        <div className="text-xs text-gray-500 mt-1">
+                          <span>Bank: {payment.bank_name}</span>
+                          <span className="mx-2">•</span>
+                          <span>Ref: {payment.transaction_reference}</span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Submitted: {new Date(payment.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-green-600">
-                        ₦{payment.amount?.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {payment.date ? new Date(payment.date).toLocaleTimeString() : 'N/A'}
-                      </p>
+                    <div className="flex space-x-2 mt-3">
+                      <button 
+                        onClick={() => onConfirmPayment(payment.id)}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-medium transition flex-1"
+                      >
+                        Confirm
+                      </button>
+                      <button 
+                        onClick={() => onRejectPayment(payment.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm font-medium transition flex-1"
+                      >
+                        Reject
+                      </button>
                     </div>
                   </div>
                 ))}
-                {dailyPayments.length > 5 && (
+                {pendingPayments.length > 3 && (
                   <p className="text-center text-sm text-amber-600 mt-2">
-                    +{dailyPayments.length - 5} more payments today
+                    +{pendingPayments.length - 3} more pending payments
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-gray-500 text-center py-4">No payments today</p>
+              <p className="text-gray-500 text-center py-4">No pending payments</p>
             )}
           </div>
         </div>
@@ -467,10 +760,116 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, onAddMember, onViewM
   );
 };
 
+// NEW: Pending Payments Tab Component
+const PendingPaymentsTab = ({ payments, onConfirm, onReject, onRefresh }) => {
+  return (
+    <div className="px-4 py-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-900">
+          Pending Payment Confirmations
+        </h2>
+        <button
+          onClick={onRefresh}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {payments.length > 0 ? (
+        <div className="grid gap-6">
+          {payments.map((payment) => (
+            <div key={payment.id} className="bg-white border border-yellow-300 rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-4 mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900">{payment.member_name}</h3>
+                    <span className="bg-yellow-100 text-yellow-800 text-sm font-medium px-3 py-1 rounded-full">
+                      Pending
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Card Number:</span>
+                      <p className="text-gray-900 font-mono">{payment.member_card_number}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Amount:</span>
+                      <p className="text-green-600 font-bold">₦{payment.amount?.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Bank:</span>
+                      <p className="text-gray-900">{payment.bank_name}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Reference:</span>
+                      <p className="text-gray-900 font-mono text-xs">{payment.transaction_reference}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Payment Type:</span>
+                      <p className="text-gray-900 capitalize">{payment.payment_type}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Submitted:</span>
+                      <p className="text-gray-900">{new Date(payment.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  {payment.transfer_date && (
+                    <div className="mt-2">
+                      <span className="font-medium text-gray-700">Transfer Date:</span>
+                      <p className="text-gray-900">{new Date(payment.transfer_date).toLocaleDateString()}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4 border-t border-gray-200">
+                <button 
+                  onClick={() => onConfirm(payment.id)}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center justify-center flex-1"
+                >
+                  ✅ Confirm Payment
+                </button>
+                <button 
+                  onClick={() => onReject(payment.id)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center justify-center flex-1"
+                >
+                  ❌ Reject Payment
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <div className="text-6xl mb-4">🎉</div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Pending Payments</h3>
+          <p className="text-gray-600">All payments have been processed. Check back later for new submissions.</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Keep the existing DailyPaymentsTab, MembersTab, ContributionsTab, ReportsTab, AddMemberModal, and Notification components exactly as they were...
+
 // Daily Payments Tab Component - Updated for card numbers
+// Fixed Daily Payments Tab Component
+// Fixed DailyPaymentsTab component
 const DailyPaymentsTab = ({ payments, onRefresh }) => {
   const today = new Date().toISOString().split('T')[0];
-  const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  
+  // Filter payments for today only using the date field from API
+  const todaysPayments = payments.filter(payment => {
+    return payment.date === today;
+  });
+  
+  const totalAmount = todaysPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
   return (
     <div className="px-4 py-6">
@@ -492,7 +891,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
           <p className="text-gray-600">Total Collected Today</p>
         </div>
         <div className="bg-blue-50 p-4 rounded-lg">
-          <p className="text-2xl font-bold text-blue-600">{payments.length}</p>
+          <p className="text-2xl font-bold text-blue-600">{todaysPayments.length}</p>
           <p className="text-gray-600">Transactions Today</p>
         </div>
         <div className="bg-purple-50 p-4 rounded-lg">
@@ -503,9 +902,9 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
 
       <div className="bg-white shadow rounded-lg">
         <div className="px-4 py-5 sm:p-6">
-          {payments.length > 0 ? (
+          {todaysPayments.length > 0 ? (
             <div className="space-y-4">
-              {payments.map((payment) => (
+              {todaysPayments.map((payment) => (
                 <div key={payment.id} className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
@@ -516,7 +915,8 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
                     <div className="text-right">
                       <p className="text-lg font-bold text-green-600">₦{payment.amount?.toLocaleString()}</p>
                       <p className="text-sm text-gray-500">
-                        {payment.date ? new Date(payment.date).toLocaleTimeString() : 'N/A'}
+                        {/* Use the formatted time from API */}
+                        {payment.time || 'N/A'}
                       </p>
                     </div>
                   </div>
@@ -532,8 +932,10 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
   );
 };
 
-// Members Tab Component - Updated for card numbers
+// Members Tab Component - Updated with clickable member names
 const MembersTab = ({ members, onRefresh }) => {
+  const navigate = useNavigate();
+  
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -542,6 +944,11 @@ const MembersTab = ({ members, onRefresh }) => {
       day: 'numeric'
     });
   };
+
+ const handleViewMemberDashboard = (member) => {
+  // Updated to match the new Django URL pattern
+  navigate(`/admin/members/${member.id}/dashboard/`, { state: { member } });
+};
 
   return (
     <div className="px-4 py-6">
@@ -582,13 +989,21 @@ const MembersTab = ({ members, onRefresh }) => {
                     <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
+                    <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {members.map((member) => (
-                    <tr key={member.id}>
+                    <tr key={member.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {member.first_name} {member.last_name}
+                        <button
+                          onClick={() => handleViewMemberDashboard(member)}
+                          className="text-amber-600 hover:text-amber-700 font-medium hover:underline text-left"
+                        >
+                          {member.first_name} {member.last_name}
+                        </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {member.card_number}
@@ -609,6 +1024,14 @@ const MembersTab = ({ members, onRefresh }) => {
                         }`}>
                           {member.status || 'Active'}
                         </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <button
+                          onClick={() => handleViewMemberDashboard(member)}
+                          className="text-amber-600 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-md text-xs font-medium transition"
+                        >
+                          View Dashboard
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -675,7 +1098,7 @@ const ContributionsTab = ({ contributions }) => {
   );
 };
 
-// Reports Tab Component (unchanged)
+// Reports Tab Component
 const ReportsTab = () => {
   return (
     <div className="px-4 py-6">
@@ -979,7 +1402,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
   );
 };
 
-// Notification Component (unchanged)
+// Notification Component
 const Notification = ({ message, type }) => (
   <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
     type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'

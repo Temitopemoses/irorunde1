@@ -9,10 +9,25 @@ const MemberDashboard = () => {
   const [amount, setAmount] = useState("");
   const [loadingPayment, setLoadingPayment] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [groupAccount, setGroupAccount] = useState(null);
+  const [bankName, setBankName] = useState("");
+  const [transactionReference, setTransactionReference] = useState("");
+  const [transferDate, setTransferDate] = useState("");
+  const [paymentCategory, setPaymentCategory] = useState("savings");
+
+  // Add refresh function
+  const refreshAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchDashboardData(),
+      fetchPaymentHistory(),
+      fetchGroupAccount()
+    ]);
+    setLoading(false);
+  };
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchPaymentHistory();
+    refreshAllData();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -24,7 +39,7 @@ const MemberDashboard = () => {
         setUserData(JSON.parse(storedUserData));
       }
 
-      const response = await fetch('https://irorunde1-production.up.railway.app/api/dashboard/', {
+      const response = await fetch('http://127.0.0.1:8000/api/user/dashboard/', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -32,9 +47,15 @@ const MemberDashboard = () => {
       
       if (response.ok) {
         const data = await response.json();
+        console.log("Dashboard data:", data);
         setDashboardData(data);
         setError(null);
       } else {
+        // Handle unauthorized (token expired)
+        if (response.status === 401) {
+          handleLogout();
+          return;
+        }
         const errorData = await response.json();
         setError(errorData.error || 'Failed to load dashboard');
       }
@@ -46,11 +67,11 @@ const MemberDashboard = () => {
     }
   };
 
-  // ✅ FIXED: Correct API endpoint (removed duplicate /api/)
+  // Fetch combined payment history
   const fetchPaymentHistory = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/payment-history/", {
+      const response = await fetch("http://127.0.0.1:8000/api/user/combined-payment-history/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -58,7 +79,7 @@ const MemberDashboard = () => {
 
       if (response.ok) {
         const data = await response.json();
-        console.log("Payment history data:", data); // Debug log
+        console.log("Payment history data:", data);
         setPaymentHistory(data);
       } else {
         console.error("Failed to load payment history:", response.status);
@@ -68,8 +89,29 @@ const MemberDashboard = () => {
     }
   };
 
-  // ✅ ENHANCED: Added missing fields for payment
-  const handlePayment = async () => {
+  // Fetch group account details
+  const fetchGroupAccount = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      const response = await fetch("http://127.0.0.1:8000/api/payments/group-account/", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setGroupAccount(data);
+      } else {
+        console.error("Failed to load group account:", response.status);
+      }
+    } catch (err) {
+      console.error("Group account fetch error:", err);
+    }
+  };
+
+  // Manual payment submission
+  const handleManualPayment = async () => {
     const token = localStorage.getItem("accessToken");
 
     if (!amount || parseFloat(amount) < 1100) {
@@ -77,19 +119,20 @@ const MemberDashboard = () => {
       return;
     }
 
-    if (!dashboardData?.member_info?.group_id || !dashboardData?.member_info?.name) {
-      alert("Missing user or group information.");
+    if (!dashboardData?.member_info?.group_id) {
+      alert("Missing group information.");
+      return;
+    }
+
+    if (!bankName || !transactionReference) {
+      alert("Please provide bank name and transaction reference.");
       return;
     }
 
     try {
       setLoadingPayment(true);
 
-      // Get user info for payment
-      const memberInfo = dashboardData.member_info;
-      const userInfo = userData || JSON.parse(localStorage.getItem('userData') || '{}');
-
-      const response = await fetch("https://irorunde1-production.up.railway.app/api/flutterwave/initialize/", {
+      const response = await fetch("http://127.0.0.1:8000/api/payments/manual/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -97,30 +140,60 @@ const MemberDashboard = () => {
         },
         body: JSON.stringify({
           amount: parseFloat(amount),
-          payment_type: "contribution",
-          group_id: memberInfo.group_id,
-          // ✅ ADDED: Required fields for payment
-          name: memberInfo.name,
-          email: userInfo.email || `${memberInfo.name.toLowerCase().replace(/\s+/g, '.')}@irorunde.com`,
-          phone: memberInfo.phone || userInfo.phone,
+          payment_type: paymentCategory,
+          bank_name: bankName,
+          transaction_reference: transactionReference,
+          transfer_date: transferDate || new Date().toISOString().split('T')[0],
         }),
       });
 
       const data = await response.json();
 
-      if (response.ok && data.payment_link) {
-        window.location.href = data.payment_link;
+      if (response.ok) {
+        alert("✅ Payment submitted successfully! Please transfer the funds to the group account and await admin confirmation.");
+        
+        // Refresh data after a short delay to allow backend processing
+        setTimeout(() => {
+          refreshAllData();
+        }, 1000);
+        
+        setShowPaymentModal(false);
+        resetPaymentForm();
       } else {
-        console.error("Payment init failed:", data);
-        alert(data.error || data.message || "Unable to start payment. Please try again.");
+        console.error("Payment submission failed:", data);
+        alert(data.error || data.message || "Unable to submit payment. Please try again.");
       }
     } catch (error) {
-      console.error("Payment error:", error);
-      alert("Network error while initiating payment.");
+      console.error("Payment submission error:", error);
+      alert("Network error while submitting payment.");
     } finally {
       setLoadingPayment(false);
-      setShowPaymentModal(false);
     }
+  };
+
+  // Reset payment form
+  const resetPaymentForm = () => {
+    setAmount("");
+    setBankName("");
+    setTransactionReference("");
+    setTransferDate("");
+    setPaymentCategory("savings");
+  };
+
+  
+  // Function to copy account number to clipboard
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Account number copied to clipboard!");
+    }).catch(err => {
+      console.error('Failed to copy: ', err);
+    });
+  };
+
+  // Reset modal form when closed
+  const handleCloseModal = () => {
+    setShowPaymentModal(false);
+    resetPaymentForm();
   };
 
   const handleLogout = () => {
@@ -130,40 +203,62 @@ const MemberDashboard = () => {
     window.location.href = '/login';
   };
 
-  // ✅ ADDED: Payment verification after redirect
-  useEffect(() => {
-    const verifyPaymentAfterRedirect = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tx_ref = urlParams.get('tx_ref');
-      const status = urlParams.get('status');
-      
-      if (status === 'successful' && tx_ref) {
-        try {
-          const token = localStorage.getItem('accessToken');
-          const response = await fetch(`https://irorunde1-production.up.railway.app/api/verify_flutterwave_payment?tx_ref=${tx_ref}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            alert('✅ Payment verified successfully!');
-            // Refresh data
-            fetchDashboardData();
-            fetchPaymentHistory();
-          }
-        } catch (error) {
-          console.error('Payment verification error:', error);
-        }
-        
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-    
-    verifyPaymentAfterRedirect();
-  }, []);
+  // NEW: Enhanced financial cards with paid amounts
+  const FinancialCard = ({ title, amount, paidAmount, icon, color, type = 'default' }) => (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="px-4 py-5 sm:p-6">
+        <div className="flex items-center">
+          <div className={`flex-shrink-0 bg-${color}-100 rounded-md p-3`}>
+            {icon}
+          </div>
+          <div className="ml-5 w-0 flex-1">
+            <dl>
+              <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+              <dd className="text-lg font-medium text-gray-900">
+                ₦{amount?.toLocaleString() || '0'}
+              </dd>
+              {/* Show paid amount for loans */}
+              {type === 'loan' && paidAmount > 0 && (
+                <dt className="text-xs font-medium text-gray-400 truncate">
+                  Paid: ₦{paidAmount?.toLocaleString() || '0'}
+                </dt>
+              )}
+              {/* Show count for fixed deposits */}
+              {type === 'fixed_deposit' && dashboardData?.financial_summary?.fixed_deposit_count > 0 && (
+                <dt className="text-xs font-medium text-gray-400 truncate">
+                  {dashboardData.financial_summary.fixed_deposit_count} deposit(s)
+                </dt>
+              )}
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Icons for financial cards
+  const icons = {
+    savings: (
+      <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    loan: (
+      <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    fixed: (
+      <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+    investment: (
+      <svg className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      </svg>
+    )
+  };
 
   if (loading) {
     return (
@@ -182,12 +277,20 @@ const MemberDashboard = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Dashboard Error</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <button 
-            onClick={fetchDashboardData}
-            className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
-          >
-            Retry
-          </button>
+          <div className="space-x-2">
+            <button 
+              onClick={refreshAllData}
+              className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
+            >
+              Retry
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700"
+            >
+              Login Again
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -200,7 +303,7 @@ const MemberDashboard = () => {
           <h2 className="text-2xl font-bold text-gray-800 mb-4">No Dashboard Data</h2>
           <p className="text-gray-600 mb-4">Unable to load dashboard information</p>
           <button 
-            onClick={fetchDashboardData}
+            onClick={refreshAllData}
             className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
           >
             Try Again
@@ -212,7 +315,7 @@ const MemberDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Header with Refresh Button */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
@@ -241,6 +344,17 @@ const MemberDashboard = () => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Refresh Button */}
+              <button
+                onClick={refreshAllData}
+                disabled={loading}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2 disabled:opacity-50"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>{loading ? "Refreshing..." : "Refresh"}</span>
+              </button>
               <span className="text-gray-700">
                 {dashboardData.member_info.name}
               </span>
@@ -258,11 +372,10 @@ const MemberDashboard = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          {/* Welcome Card with Larger Photo */}
+          {/* Welcome Card */}
           <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
             <div className="px-4 py-5 sm:p-6">
               <div className="flex items-center space-x-6">
-                {/* Large Passport Photo */}
                 {dashboardData.member_info.passport_photo ? (
                   <div className="flex-shrink-0">
                     <img
@@ -297,9 +410,50 @@ const MemberDashboard = () => {
             </div>
           </div>
 
+          {/* Group Account Information */}
+          {groupAccount && (
+            <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-6 mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-green-800 mb-2">Group Bank Account Details</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-green-700 w-32">Bank Name:</span>
+                      <span className="text-green-900">{groupAccount.bank_name || "Not set"}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-green-700 w-32">Account Number:</span>
+                      <span className="text-green-900 font-mono">{groupAccount.account_number || "Not set"}</span>
+                      {groupAccount.account_number && (
+                        <button
+                          onClick={() => copyToClipboard(groupAccount.account_number)}
+                          className="ml-2 text-green-600 hover:text-green-800"
+                          title="Copy to clipboard"
+                        >
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-sm font-medium text-green-700 w-32">Account Name:</span>
+                      <span className="text-green-900">{groupAccount.account_name || "Not set"}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="bg-green-600 text-white px-4 py-2 rounded-lg">
+                    <p className="text-sm">Use this account for all payments</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Member Information Cards */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {/* Membership Info */}
+            {/* Card Number */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
                 <div className="flex items-center">
@@ -310,8 +464,8 @@ const MemberDashboard = () => {
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Membership No.</dt>
-                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.membership_number}</dd>
+                      <dt className="text-sm font-medium text-gray-500 truncate">Card number</dt>
+                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.card_number}</dd>
                     </dl>
                   </div>
                 </div>
@@ -378,42 +532,46 @@ const MemberDashboard = () => {
             </div>
           </div>
 
-          {/* Financial Summary */}
-          {dashboardData.financial_summary && (
-            <div className="mt-8">
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Financial Summary</h3>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Contributions</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-gray-900">
-                      ₦{dashboardData.financial_summary.total_contributions?.toLocaleString()}
-                    </dd>
-                  </div>
-                </div>
-                
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <dt className="text-sm font-medium text-gray-500 truncate">This Week</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-green-600">
-                      ₦{dashboardData.financial_summary.weekly_contributions?.toLocaleString()}
-                    </dd>
-                  </div>
-                </div>
-                
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="px-4 py-5 sm:p-6">
-                    <dt className="text-sm font-medium text-gray-500 truncate">This Month</dt>
-                    <dd className="mt-1 text-3xl font-semibold text-blue-600">
-                      ₦{dashboardData.financial_summary.monthly_contributions?.toLocaleString()}
-                    </dd>
-                  </div>
-                </div>
-              </div>
+          {/* Enhanced Financial Summary */}
+          <div className="mt-8">
+            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Financial Summary</h3>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <FinancialCard
+                title="Total Savings"
+                amount={dashboardData.financial_summary?.total_savings}
+                icon={icons.savings}
+                color="green"
+              />
+              
+              <FinancialCard
+                title="Outstanding Loans"
+                amount={dashboardData.financial_summary?.outstanding_loans}
+                paidAmount={dashboardData.financial_summary?.total_outstanding_payments}
+                icon={icons.loan}
+                color="red"
+                type="loan"
+              />
+              
+              <FinancialCard
+                title="Fixed Deposits"
+                amount={dashboardData.financial_summary?.fixed_deposits}
+                icon={icons.fixed}
+                color="blue"
+                type="fixed_deposit"
+              />
+              
+              <FinancialCard
+                title="Investment Loans"
+                amount={dashboardData.financial_summary?.investment_loans}
+                paidAmount={dashboardData.financial_summary?.total_investment_loan_payments}
+                icon={icons.investment}
+                color="purple"
+                type="loan"
+              />
             </div>
-          )}
+          </div>
 
-        {/* Payment History - ENHANCED */}
+          {/* Payment History */}
           {paymentHistory.length > 0 ? (
             <div className="mt-10">
               <div className="flex justify-between items-center mb-4">
@@ -431,21 +589,12 @@ const MemberDashboard = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount (₦)
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Reference
-                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount (₦)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank Name</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -455,26 +604,37 @@ const MemberDashboard = () => {
                           {new Date(payment.date || payment.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm capitalize">
-                          {payment.payment_type}
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            payment.payment_type === 'savings' ? 'bg-green-100 text-green-800' :
+                            payment.payment_type === 'fixed_deposit' ? 'bg-blue-100 text-blue-800' :
+                            payment.payment_type === 'outstanding_balance' ? 'bg-yellow-100 text-yellow-800' :
+                            payment.payment_type === 'investment_loan' ? 'bg-purple-100 text-purple-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {payment.payment_type?.replace('_', ' ') || 'contribution'}
+                          </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           ₦{payment.amount?.toLocaleString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span
-                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                              payment.status === "successful" || payment.is_successful
-                                ? "bg-green-100 text-green-800"
-                                : payment.status === "pending"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {payment.status || (payment.is_successful ? "successful" : "pending")}
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            payment.status === "confirmed" || payment.is_successful
+                              ? "bg-green-100 text-green-800"
+                              : payment.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : payment.status === "rejected"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}>
+                            {payment.status || (payment.is_successful ? "confirmed" : "pending")}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
-                          {payment.tx_ref || payment.flutterwave_reference || 'N/A'}
+                          {payment.reference_number || payment.tx_ref || payment.card_number_reference || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {payment.bank_name || 'N/A'}
                         </td>
                       </tr>
                     ))}
@@ -504,7 +664,6 @@ const MemberDashboard = () => {
           <div className="mt-8">
             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {/* Make Contribution Button */}
               <button
                 onClick={() => setShowPaymentModal(true)}
                 className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
@@ -516,8 +675,8 @@ const MemberDashboard = () => {
                     </svg>
                   </div>
                   <div className="ml-4">
-                    <h4 className="text-lg font-medium text-gray-900">Make Contribution</h4>
-                    <p className="mt-1 text-sm text-gray-500">Add funds to your account</p>
+                    <h4 className="text-lg font-medium text-gray-900">Make Payment</h4>
+                    <p className="mt-1 text-sm text-gray-500">Submit manual payment request</p>
                   </div>
                 </div>
               </button>
@@ -526,40 +685,229 @@ const MemberDashboard = () => {
         </div>
       </main>
 
-      {/* Flutterwave Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white rounded-lg shadow-lg w-96 p-6 relative">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Make a Contribution</h2>
+      {/* UPDATED: Modern Payment Modal */}
+{showPaymentModal && (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-white">Make a Payment</h2>
+            <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
+          </div>
+          <button
+            onClick={handleCloseModal}
+            className="text-white hover:text-amber-200 transition-colors"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
 
+      {/* Body */}
+      <div className="p-6 max-h-[70vh] overflow-y-auto">
+        {/* Group Account Card */}
+        {groupAccount && (
+          <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
+            <div className="flex items-start space-x-3">
+              <div className="bg-emerald-100 rounded-lg p-2">
+                <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-emerald-800 text-sm mb-2">Transfer to Group Account</h3>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Bank:</span>
+                    <span className="text-emerald-900">{groupAccount.bank_name || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Account No:</span>
+                    <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Account Name:</span>
+                    <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Category Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            What are you paying for?
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { value: "savings", label: "Savings", icon: "💰", color: "green" },
+              { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
+              { value: "outstanding_balance", label: "Outstanding Balance", icon: "⚡", color: "yellow" },
+              { value: "investment_loan", label: "Investment Loan", icon: "📈", color: "purple" }
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setPaymentCategory(option.value)}
+                className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                  paymentCategory === option.value
+                    ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="text-2xl mb-1">{option.icon}</div>
+                <div className="text-xs font-medium text-gray-700">{option.label}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Amount Input */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Amount (₦)
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <span className="text-gray-500 font-medium">₦</span>
+            </div>
             <input
               type="number"
-              placeholder="Enter amount (₦1100 minimum)"
+              placeholder="Enter amount (min: 1,100)"
               min="1100"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="border border-gray-300 rounded-lg w-full p-2 mb-4 focus:ring-amber-500 focus:border-amber-500"
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              required
             />
+          </div>
+          {amount && parseFloat(amount) < 1100 && (
+            <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
+          )}
+        </div>
 
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400"
-              >
-                Cancel
-              </button>
+        {/* Bank Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* Bank Name */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Your Bank
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="e.g., First Bank"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                required
+              />
+            </div>
+          </div>
 
-              <button
-                onClick={handlePayment}
-                disabled={loadingPayment}
-                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
-              >
-                {loadingPayment ? "Processing..." : "Pay Now"}
-              </button>
+          {/* Transfer Date */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Transfer Date
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <input
+                type="date"
+                value={transferDate}
+                onChange={(e) => setTransferDate(e.target.value)}
+                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              />
             </div>
           </div>
         </div>
-      )}
+
+        {/* Transaction Reference */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Transaction Reference
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Enter your name as reference"
+              value={transactionReference}
+              onChange={(e) => setTransactionReference(e.target.value)}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              required
+            />
+          </div>
+          <p className="text-gray-500 text-xs mt-2">Use your full name as it appears on your bank account</p>
+        </div>
+
+        {/* Instructions */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="flex items-start space-x-3">
+            <div className="bg-blue-100 rounded-lg p-2">
+              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-blue-800 text-sm mb-2">Important Instructions</h4>
+              <ul className="text-blue-700 text-xs space-y-1">
+                <li>• Transfer exact amount to the group account</li>
+                <li>• Use your name as transfer reference</li>
+                <li>• Payments show as pending until admin confirmation</li>
+                <li>• Confirmation typically takes 24 hours</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+        <div className="flex space-x-3">
+          <button
+            onClick={handleCloseModal}
+            className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleManualPayment}
+            disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
+          >
+            {loadingPayment ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span>Submitting...</span>
+              </div>
+            ) : (
+              "Submit Payment"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

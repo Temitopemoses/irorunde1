@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const loginAdmin = async (identifier, password) => {
-  const res = await axios.post('https://irorunde1-production.up.railway.app/api/accounts/admin/login/', {
+  const res = await axios.post('http://127.0.0.1:8000/api/accounts/admin/login/', {
     identifier, password
   });
   // store tokens
