@@ -20,6 +20,7 @@ const MemberDashboardView = () => {
   const [transferDate, setTransferDate] = useState("");
   const [paymentCategory, setPaymentCategory] = useState("savings");
   const [memberFixedDeposits, setMemberFixedDeposits] = useState([]);
+  const [loadingFixedDeposits, setLoadingFixedDeposits] = useState(false);
 
   // Loan management states
   const [showLoanModal, setShowLoanModal] = useState(false);
@@ -68,9 +69,6 @@ const MemberDashboardView = () => {
         await fetchMemberLoans(memberId, token);
         await fetchMemberFixedDeposits(memberId, token);
 
-        // Log fetched data for debugging
-        createFixedDepositsFromPaymentHistory
-        
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to load member dashboard');
@@ -83,7 +81,7 @@ const MemberDashboardView = () => {
     }
   };
 
-  // Fetch payment history for the member
+  // Fetch payment history for member
   const fetchPaymentHistory = async (memberId, token) => {
     try {
       const response = await fetch(`${API_BASE}admin/members/${memberId}/payments/`, {
@@ -128,6 +126,7 @@ const MemberDashboardView = () => {
 
   // Enhanced fixed deposits fetch with better error handling
   const fetchMemberFixedDeposits = async (memberId, token) => {
+    setLoadingFixedDeposits(true);
     try {
       console.log('Fetching fixed deposits for member:', memberId);
       
@@ -141,6 +140,7 @@ const MemberDashboardView = () => {
       ];
 
       let fixedDepositsData = [];
+      let success = false;
 
       for (const endpoint of endpoints) {
         try {
@@ -169,7 +169,8 @@ const MemberDashboardView = () => {
             if (fixedDepositsData.length > 0) {
               console.log('Found fixed deposits via API:', fixedDepositsData);
               setMemberFixedDeposits(fixedDepositsData);
-              return;
+              success = true;
+              break; // Exit loop if successful
             }
           } else {
             console.log(`Endpoint ${endpoint} failed with status:`, response.status);
@@ -180,13 +181,238 @@ const MemberDashboardView = () => {
       }
 
       // If no fixed deposits found via API, create from payment history
-      console.log('No fixed deposits found via API, checking payment history...');
-      await createFixedDepositsFromPaymentHistory();
+      if (!success) {
+        console.log('No fixed deposits found via API, checking payment history...');
+        await createFixedDepositsFromPaymentHistory();
+      }
       
     } catch (err) {
       console.error("All fixed deposit endpoints failed:", err);
       await createFixedDepositsFromPaymentHistory();
+    } finally {
+      setLoadingFixedDeposits(false);
     }
+  };
+
+  // FIXED: Handle fixed deposit collection WITHOUT page reload
+  const handleCollectFixedDeposit = async (fixedDepositId) => {
+    const token = localStorage.getItem('accessToken');
+    
+    if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      console.log('=== COLLECTING FIXED DEPOSIT ===');
+      console.log('Fixed Deposit ID from click:', fixedDepositId);
+      console.log('All memberFixedDeposits:', memberFixedDeposits);
+      
+      // More robust ID matching
+      const fixedDeposit = memberFixedDeposits.find(fd => {
+        const fdId = fd.id?.toString();
+        const clickId = fixedDepositId?.toString();
+        console.log(`Comparing: ${fdId} with ${clickId}`);
+        return fdId === clickId;
+      });
+      
+      if (!fixedDeposit) {
+        console.error('Fixed deposit not found!');
+        console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
+        alert("Fixed deposit not found! Please refresh and try again.");
+        return;
+      }
+
+      console.log('Found fixed deposit:', fixedDeposit);
+
+      // Check if it's temporary
+      const isTemporaryDeposit = fixedDepositId.includes('temp-') || 
+                               (fixedDeposit._source && fixedDeposit._source === 'payment_history');
+
+      if (isTemporaryDeposit) {
+        console.log('Handling temporary fixed deposit...');
+        
+        // Create updated deposits array
+        const updatedDeposits = memberFixedDeposits.map(fd => {
+          const fdId = fd.id?.toString();
+          const clickId = fixedDepositId?.toString();
+          if (fdId === clickId) {
+            return { 
+              ...fd, 
+              is_active: false, 
+              collected_at: new Date().toISOString(),
+              status: 'collected'
+            };
+          }
+          return fd;
+        });
+        
+        console.log('Updated deposits:', updatedDeposits);
+        
+        // Update state IMMEDIATELY - no refresh
+        setMemberFixedDeposits(updatedDeposits);
+        
+        // Calculate new total from UPDATED data
+        const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
+        const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
+          sum + (parseFloat(deposit.amount) || 0), 0
+        );
+        
+        console.log('Active deposits after collection:', activeDeposits);
+        console.log('New fixed deposits total:', activeDepositsTotal);
+        
+        // Update dashboard data IMMEDIATELY - no refresh
+        setDashboardData(prev => {
+          if (!prev || !prev.financial_summary) return prev;
+          
+          return {
+            ...prev,
+            financial_summary: {
+              ...prev.financial_summary,
+              fixed_deposits: activeDepositsTotal,
+              // Also update any other related fields if needed
+              active_fixed_deposits: activeDepositsTotal
+            }
+          };
+        });
+        
+        // FIXED: Simple notification to member dashboard - NO REFRESH
+        const updateData = {
+          memberId: memberId,
+          timestamp: Date.now(),
+          action: 'collected',
+          depositId: fixedDepositId,
+          amount: fixedDeposit.amount,
+          type: 'fixed_deposit_update'
+        };
+        
+        // Only use localStorage notification - NO triggers that cause refresh
+        localStorage.setItem('member_dashboard_update', JSON.stringify(updateData));
+        
+        console.log('Notified member dashboard - NO REFRESH TRIGGERED');
+        
+        alert("✅ Fixed deposit marked as collected!");
+        
+      } else {
+        console.log('Handling real fixed deposit via API...');
+        
+        const endpoints = [
+          `${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`,
+          `${API_BASE}fixed-deposits/${fixedDepositId}/collect/`,
+          `${API_BASE}admin/fixed-deposits/${fixedDepositId}/mark-collected/`,
+        ];
+
+        let success = false;
+
+        for (const endpoint of endpoints) {
+          try {
+            console.log('Trying endpoint:', endpoint);
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            
+            if (response.ok) {
+              console.log('Success with endpoint:', endpoint);
+              success = true;
+              break;
+            }
+          } catch (err) {
+            console.log(`Endpoint ${endpoint} error:`, err);
+          }
+        }
+
+        if (success) {
+          alert("✅ Fixed deposit marked as collected!");
+          
+          // FIXED: Simple notification only - NO REFRESH
+          const updateData = {
+            memberId: memberId,
+            timestamp: Date.now(),
+            action: 'collected',
+            depositId: fixedDepositId,
+            amount: fixedDeposit.amount,
+            type: 'fixed_deposit_update'
+          };
+          
+          // Only use localStorage notification - NO triggers that cause refresh
+          localStorage.setItem('member_dashboard_update', JSON.stringify(updateData));
+          
+          // Update local state immediately
+          const updatedDeposits = memberFixedDeposits.map(fd => {
+            const fdId = fd.id?.toString();
+            const clickId = fixedDepositId?.toString();
+            if (fdId === clickId) {
+              return { 
+                ...fd, 
+                is_active: false, 
+                collected_at: new Date().toISOString(),
+                status: 'collected'
+              };
+            }
+            return fd;
+          });
+          
+          setMemberFixedDeposits(updatedDeposits);
+          
+          // Calculate new total from UPDATED data
+          const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
+          const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
+            sum + (parseFloat(deposit.amount) || 0), 0
+          );
+          
+          // Update dashboard data immediately
+          setDashboardData(prev => {
+            if (!prev || !prev.financial_summary) return prev;
+            
+            return {
+              ...prev,
+              financial_summary: {
+                ...prev.financial_summary,
+                fixed_deposits: activeDepositsTotal,
+                active_fixed_deposits: activeDepositsTotal
+              }
+            };
+          });
+          
+          console.log('Notified member dashboard - NO REFRESH TRIGGERED');
+          
+        } else {
+          alert("Unable to collect fixed deposit via API. Please try again.");
+        }
+      }
+    } catch (error) {
+      console.error("Fixed deposit collection error:", error);
+      alert("Error collecting fixed deposit. Please try again.");
+    }
+  };
+
+  // FIXED: Calculate active fixed deposits total
+  const getActiveFixedDepositsTotal = () => {
+    // Use memberFixedDeposits state as primary source
+    if (memberFixedDeposits.length > 0) {
+      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
+      const total = activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+      console.log('Active deposits from memberFixedDeposits:', activeDeposits, 'Total:', total);
+      return total;
+    }
+    
+    // Fallback to dashboard data
+    console.log('Using dashboard data for fixed deposits:', dashboardData.financial_summary?.fixed_deposits);
+    return dashboardData.financial_summary?.fixed_deposits || 0;
+  };
+
+  // FIXED: Calculate collected fixed deposits total
+  const getCollectedFixedDepositsTotal = () => {
+    // Use memberFixedDeposits state as primary source
+    if (memberFixedDeposits.length > 0) {
+      const collectedDeposits = memberFixedDeposits.filter(fd => fd.is_active === false);
+      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+    }
+    
+    return 0;
   };
 
   // Create fixed deposits from payment history as fallback
@@ -211,7 +437,8 @@ const MemberDashboardView = () => {
           duration_months: 12,
           interest_rate: 0,
           member: memberId,
-          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`
+          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+          _source: 'payment_history'
         }));
 
         console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
@@ -236,14 +463,14 @@ const MemberDashboardView = () => {
 
   // Update group account endpoint - with better error handling
   const fetchGroupAccount = async (token) => {
-  try {
-    const response = await fetch("http://127.0.0.1:8000/api/payments/group-account/", {
-      headers: {
-        "Authorization": `Bearer ${token}`,
-      },
-    });
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/payments/group-account/", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
 
-    if (response.ok) {
+      if (response.ok) {
         const data = await response.json();
         setGroupAccount(data);
       } else {
@@ -254,7 +481,7 @@ const MemberDashboardView = () => {
     }
   };
 
-  // CORRECTED: Admin grant loan to member
+  // Admin grant loan to member
   const handleGrantLoan = async () => {
     const token = localStorage.getItem('accessToken');
 
@@ -300,7 +527,7 @@ const MemberDashboardView = () => {
     }
   };
 
-  // CORRECTED: Admin manual payment submission for member
+  // Admin manual payment submission for member
   const handleAdminManualPayment = async () => {
     const token = localStorage.getItem('accessToken');
 
@@ -387,121 +614,7 @@ const MemberDashboardView = () => {
     }
   };
 
-  // Handle fixed deposit collection - UPDATED with better API handling
-  // Handle fixed deposit collection - FIXED for temporary deposits
-const handleCollectFixedDeposit = async (fixedDepositId) => {
-  const token = localStorage.getItem('accessToken');
-  
-  if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
-    return;
-  }
-
-  try {
-    // Check if this is a temporary fixed deposit (created from payment history)
-    const isTemporaryDeposit = typeof fixedDepositId === 'string' && fixedDepositId.includes('temp-');
-    
-    if (isTemporaryDeposit) {
-      // Handle temporary deposits locally
-      console.log("Handling temporary fixed deposit collection locally...");
-      
-      // Find the fixed deposit to get its amount
-      const fixedDeposit = memberFixedDeposits.find(fd => fd.id === fixedDepositId);
-      if (!fixedDeposit) {
-        alert("Fixed deposit not found!");
-        return;
-      }
-
-      // Mark as inactive locally
-      setMemberFixedDeposits(prev => 
-        prev.map(fd => 
-          fd.id === fixedDepositId 
-            ? { ...fd, is_active: false, collected_at: new Date().toISOString() }
-            : fd
-        )
-      );
-      
-      alert("✅ Fixed deposit marked as collected locally!");
-      
-      // Refresh dashboard to update totals
-      const freshToken = localStorage.getItem('accessToken');
-      await fetchMemberDashboardData(memberId, freshToken);
-      
-    } else {
-      // Handle real fixed deposits via API
-      console.log("Handling real fixed deposit via API...");
-      
-      // First try the main API endpoint
-      let response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      // If the main endpoint doesn't exist, try alternative endpoints
-      if (response.status === 404) {
-        console.log("Main collection endpoint not found, trying alternatives...");
-        
-        const alternativeEndpoints = [
-          `${API_BASE}fixed-deposits/${fixedDepositId}/collect/`,
-          `${API_BASE}admin/fixed-deposits/${fixedDepositId}/mark-collected/`,
-          `${API_BASE}fixed-deposits/${fixedDepositId}/mark-collected/`
-        ];
-
-        for (const endpoint of alternativeEndpoints) {
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (response.ok) break;
-        }
-      }
-
-      if (response.ok) {
-        alert("✅ Fixed deposit marked as collected!");
-        
-        // Refresh the data
-        const freshToken = localStorage.getItem('accessToken');
-        await fetchMemberFixedDeposits(memberId, freshToken);
-        await fetchMemberDashboardData(memberId, freshToken);
-        
-      } else {
-        const data = await response.json();
-        alert(data.error || data.detail || "Unable to collect fixed deposit.");
-      }
-    }
-  } catch (error) {
-    console.error("Fixed deposit collection error:", error);
-    
-    // Fallback for temporary fixed deposits in case of network error
-    const isTemporaryDeposit = typeof fixedDepositId === 'string' && fixedDepositId.includes('temp-');
-    if (isTemporaryDeposit) {
-      console.log("Network error, handling temporary fixed deposit locally...");
-      
-      setMemberFixedDeposits(prev => 
-        prev.map(fd => 
-          fd.id === fixedDepositId 
-            ? { ...fd, is_active: false, collected_at: new Date().toISOString() }
-            : fd
-        )
-      );
-      
-      alert("✅ Fixed deposit marked as collected locally!");
-      
-      const freshToken = localStorage.getItem('accessToken');
-      await fetchMemberDashboardData(memberId, freshToken);
-    } else {
-      alert("Network error while collecting fixed deposit.");
-    }
-  }
-};
-
-  // CORRECTED: Reset loan modal
+  // Reset loan modal
   const resetLoanModal = () => {
     setLoanAmount("");
     setLoanType("regular");
@@ -547,7 +660,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
       .reduce((sum, payment) => sum + (payment.amount || 0), 0);
   };
 
-  // Calculate savings for the current week
+  // Calculate savings for current week
   const getSavingsThisWeek = () => {
     const today = new Date();
     const startOfWeek = new Date(today);
@@ -570,7 +683,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     }).reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
   };
 
-  // Calculate savings for the current month
+  // Calculate savings for current month
   const getSavingsThisMonth = () => {
     const today = new Date();
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -598,24 +711,6 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
       .reduce((sum, payment) => sum + (payment.amount || 0), 0);
   };
 
-  // Get fixed deposits from payment history (fallback)
-  const getFixedDepositsFromPayments = () => {
-    const fixedDepositPayments = paymentHistory.filter(payment => 
-      payment.payment_type === 'fixed_deposit' && 
-      (payment.status === 'confirmed' || payment.is_successful)
-    );
-
-    return fixedDepositPayments.map((payment, index) => ({
-      id: `temp-fd-${payment.id || index}`,
-      amount: payment.amount,
-      created_at: payment.date || payment.created_at,
-      is_active: true,
-      duration_months: 12,
-      interest_rate: 0,
-      payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`
-    }));
-  };
-
   // Calculate loan details for display
   const calculateLoanDetails = (loan) => {
     if (loan.loan_type === 'investment') {
@@ -632,6 +727,9 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
       interestAmount: 'Auto-applied'
     };
   };
+
+  // Use memberFixedDeposits directly for display
+  const displayFixedDeposits = memberFixedDeposits;
 
   if (loading) {
     return (
@@ -683,11 +781,6 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
       </div>
     );
   }
-
-  // Determine which fixed deposits to display
-  const displayFixedDeposits = memberFixedDeposits.length > 0 
-    ? memberFixedDeposits 
-    : getFixedDepositsFromPayments();
 
   console.log('Display fixed deposits:', displayFixedDeposits);
   console.log('Payment history:', paymentHistory);
@@ -910,9 +1003,13 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                           </div>
                           <div className="ml-5 w-0 flex-1">
                             <dl>
-                              <dt className="text-sm font-medium text-gray-500 truncate">Fixed Deposits</dt>
+                              <dt className="text-sm font-medium text-gray-500 truncate">Active Fixed Deposits</dt>
                               <dd className="text-lg font-medium text-gray-900">
-                                ₦{dashboardData.financial_summary.fixed_deposits?.toLocaleString() || '0'}
+                                ₦{getActiveFixedDepositsTotal().toLocaleString()}
+                              </dd>
+                              <dt className="text-sm font-medium text-gray-500 truncate mt-1">Collected Fixed Deposits</dt>
+                              <dd className="text-sm font-medium text-green-600">
+                                ₦{getCollectedFixedDepositsTotal().toLocaleString()}
                               </dd>
                             </dl>
                           </div>
@@ -1146,151 +1243,149 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                     </div>
                   </div>
 
-                  {/* Debug Info */}
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <svg className="h-4 w-4 text-yellow-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="text-sm text-yellow-700">
-                          Debug: {displayFixedDeposits.length} fixed deposits loaded from {memberFixedDeposits.length > 0 ? 'API' : 'Payment History'}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          console.log('Fixed deposits debug info:', {
-                            memberFixedDeposits,
-                            displayFixedDeposits,
-                            paymentHistory: paymentHistory.filter(p => p.payment_type === 'fixed_deposit')
-                          });
-                        }}
-                        className="text-yellow-600 hover:text-yellow-800 text-xs"
-                      >
-                        Log Details
-                      </button>
+                  {/* Loading State */}
+                  {loadingFixedDeposits ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="mt-2 text-gray-600">Loading fixed deposits...</p>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Active Fixed Deposits */}
+                      <div className="mb-6">
+                        <h4 className="text-md font-medium text-gray-900 mb-3">
+                          Active Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active !== false).length})
+                        </h4>
+                        
+                        {displayFixedDeposits.filter(fd => fd.is_active !== false).length > 0 ? (
+                          <div className="space-y-4">
+                            {displayFixedDeposits.filter(fd => fd.is_active !== false).map((fixedDeposit) => (
+                              <div key={fixedDeposit.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div>
+                                    <h5 className="font-medium text-gray-900">
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
+                                        ? 'Fixed Deposit (From Payments)' 
+                                        : `Fixed Deposit #${fixedDeposit.id}`}
+                                    </h5>
+                                    <p className="text-sm text-gray-600">
+                                      Created: {new Date(fixedDeposit.created_at).toLocaleDateString()}
+                                    </p>
+                                  
+                                    {fixedDeposit.payment_reference && (
+                                      <p className="text-sm text-gray-600">
+                                        Reference: {fixedDeposit.payment_reference}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-gray-900">
+                                      ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
+                                    </p>
+                                    <p className="text-sm text-green-600 font-medium">Active</p>
+                                  </div>
+                                </div>
+                                
+                                {/* Additional fixed deposit details */}
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-600 mt-3">
+                                  <div>
+                                    <span className="font-medium">Amount:</span> 
+                                    <br />₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Duration:</span> 
+                                    <br />{fixedDeposit.duration_months || '12'} months
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Interest Rate:</span> 
+                                    <br />{fixedDeposit.interest_rate || '0'}%
+                                  </div>
+                                </div>
 
-                  {/* Active Fixed Deposits */}
-                  <div className="mb-6">
-                    <h4 className="text-md font-medium text-gray-900 mb-3">
-                      Active Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active !== false).length})
-                    </h4>
-                    
-                    {displayFixedDeposits.filter(fd => fd.is_active !== false).length > 0 ? (
-                      <div className="space-y-4">
-                        {displayFixedDeposits.filter(fd => fd.is_active !== false).map((fixedDeposit) => (
-                          <div key={fixedDeposit.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <h5 className="font-medium text-gray-900">
-                                  {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
-                                    ? 'Fixed Deposit (From Payments)' 
-                                    : `Fixed Deposit #${fixedDeposit.id}`}
-                                </h5>
-                                <p className="text-sm text-gray-600">
-                                  Created: {new Date(fixedDeposit.created_at).toLocaleDateString()}
-                                </p>
-                              
-                                {fixedDeposit.payment_reference && (
-                                  <p className="text-sm text-gray-600">
-                                    Reference: {fixedDeposit.payment_reference}
-                                  </p>
-                                )}
+                                {/* Collection Button - Show for ALL fixed deposits now */}
+                                <div className="flex justify-end mt-3 pt-3 border-t border-blue-200">
+                                  {fixedDeposit.is_active !== false ? (
+                                    <button
+                                      onClick={() => handleCollectFixedDeposit(fixedDeposit.id)}
+                                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition flex items-center"
+                                    >
+                                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Mark as Collected
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-center space-x-2 text-gray-600">
+                                      <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      <span className="font-medium">Collected</span>
+                                      {fixedDeposit.collected_at && (
+                                        <span className="text-sm text-gray-500">
+                                          on {new Date(fixedDeposit.collected_at).toLocaleDateString()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-lg font-bold text-gray-900">
-                                  ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
-                                </p>
-                                <p className="text-sm text-green-600 font-medium">Active</p>
-                              </div>
-                            </div>
-                            
-                            {/* Additional fixed deposit details */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-600 mt-3">
-                              <div>
-                                <span className="font-medium">Amount:</span> 
-                                <br />₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
-                              </div>
-                              <div>
-                                <span className="font-medium">Duration:</span> 
-                                <br />{fixedDeposit.duration_months || '12'} months
-                              </div>
-                              <div>
-                                <span className="font-medium">Interest Rate:</span> 
-                                <br />{fixedDeposit.interest_rate || '0'}%
-                              </div>
-                            </div>
-
-                            {/* Collection Button - Show for ALL fixed deposits now */}
-                            <div className="flex justify-end mt-3 pt-3 border-t border-blue-200">
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Fixed Deposits</h3>
+                            <p className="text-gray-500 mb-4">This member doesn't have any active fixed deposits.</p>
+                            <div className="space-x-2">
                               <button
-                                onClick={() => handleCollectFixedDeposit(fixedDeposit.id)}
-                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition flex items-center"
+                                onClick={refreshFixedDeposits}
+                                className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
                               >
-                                <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Mark as Collected
+                                Refresh Fixed Deposits
                               </button>
                             </div>
                           </div>
-                        ))}
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No Active Fixed Deposits</h3>
-                        <p className="text-gray-500 mb-4">This member doesn't have any active fixed deposits.</p>
-                        <div className="space-x-2">
-                          <button
-                            onClick={refreshFixedDeposits}
-                            className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
-                          >
-                            Refresh Fixed Deposits
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Collected/Inactive Fixed Deposits */}
-                  {displayFixedDeposits.filter(fd => fd.is_active === false).length > 0 && (
-                    <div>
-                      <h4 className="text-md font-medium text-gray-900 mb-3">
-                        Collected Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active === false).length})
-                      </h4>
-                      <div className="space-y-3">
-                        {displayFixedDeposits.filter(fd => fd.is_active === false).map((fixedDeposit) => (
-                          <div key={fixedDeposit.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="font-medium text-gray-900">
-                                  {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
-                                    ? 'Fixed Deposit (From Payments)' 
-                                    : `Fixed Deposit #${fixedDeposit.id}`}
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                  Amount: ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                  Collected: {fixedDeposit.collected_at ? new Date(fixedDeposit.collected_at).toLocaleDateString() : 'N/A'}
-                                </p>
+                      {/* Collected/Inactive Fixed Deposits */}
+                      {displayFixedDeposits.filter(fd => fd.is_active === false).length > 0 && (
+                        <div>
+                          <h4 className="text-md font-medium text-gray-900 mb-3">
+                            Collected Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active === false).length})
+                          </h4>
+                          <div className="space-y-3">
+                            {displayFixedDeposits.filter(fd => fd.is_active === false).map((fixedDeposit) => (
+                              <div key={fixedDeposit.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <p className="font-medium text-gray-900">
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
+                                        ? 'Fixed Deposit (From Payments)' 
+                                        : `Fixed Deposit #${fixedDeposit.id}`}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      Amount: ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      Collected: {fixedDeposit.collected_at ? new Date(fixedDeposit.collected_at).toLocaleDateString() : 'N/A'}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-bold text-gray-900">
+                                      ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
+                                    </p>
+                                    <p className="text-xs text-gray-500">Collected</p>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">
-                                  ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
-                                </p>
-                                <p className="text-xs text-gray-500">Collected</p>
-                              </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
