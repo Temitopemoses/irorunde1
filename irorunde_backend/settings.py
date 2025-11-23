@@ -32,6 +32,9 @@ ALLOWED_HOSTS = [
 # Frontend URL (from .env or fallback)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://irorunde-frontend.vercel.app")
 
+TIME_ZONE = 'Africa/Lagos'  # or your local timezone
+USE_TZ = True
+
 # CORS
 CORS_ALLOWED_ORIGINS = [
     FRONTEND_URL,

@@ -1,7 +1,11 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
-from .models import User, Member, NextOfKin, CooperativeGroup, Payment, ContributionPlan, Transaction, MemberContribution
+from django.utils import timezone
+from .models import (
+    User, Member, NextOfKin, CooperativeGroup, Payment, 
+    ContributionPlan, Transaction, MemberContribution, ManualPayment
+)
 
 # ==================== CUSTOM ACTIONS ====================
 def make_superadmin(modeladmin, request, queryset):
@@ -32,6 +36,21 @@ def mark_payment_successful(modeladmin, request, queryset):
     queryset.update(is_successful=True)
 mark_payment_successful.short_description = "Mark selected payments as successful"
 
+# NEW: Manual Payment Actions
+def confirm_manual_payments(modeladmin, request, queryset):
+    updated = queryset.filter(status='pending').update(
+        status='confirmed',
+        confirmed_by=request.user,
+        confirmed_at=timezone.now()
+    )
+    modeladmin.message_user(request, f'{updated} manual payments confirmed successfully.')
+confirm_manual_payments.short_description = "Confirm selected manual payments"
+
+def reject_manual_payments(modeladmin, request, queryset):
+    updated = queryset.filter(status='pending').update(status='rejected')
+    modeladmin.message_user(request, f'{updated} manual payments rejected.')
+reject_manual_payments.short_description = "Reject selected manual payments"
+
 # ==================== SIMPLIFIED RESTRICTION MIXIN ====================
 class GroupAdminRestrictionMixin:
     """Mixin to restrict group admins to their managed group only"""
@@ -51,7 +70,7 @@ class GroupAdminRestrictionMixin:
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
     list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'get_managed_group', 'phone', 'is_staff_display', 'created_at')
-    list_filter = ('role', 'managed_group', 'created_at')  # REMOVED: 'is_staff' since it's a property
+    list_filter = ('role', 'managed_group', 'created_at')
     search_fields = ('username', 'email', 'first_name', 'last_name', 'phone')
     readonly_fields = ('created_at',)
     actions = [make_superadmin, make_group_admin, make_member_role]
@@ -86,6 +105,84 @@ class CustomUserAdmin(UserAdmin):
         return obj.is_staff
     is_staff_display.short_description = 'Staff Access'
     is_staff_display.boolean = True
+
+# ==================== MANUAL PAYMENT ADMIN ====================
+@admin.register(ManualPayment)
+class ManualPaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
+    list_display = (
+        'reference_number', 
+        'get_member_name',
+        'get_member_card_number',
+        'amount', 
+        'payment_type', 
+        'status', 
+        'created_at',
+        'get_confirmed_by'
+    )
+    list_filter = ('status', 'payment_type', 'group', 'created_at')
+    search_fields = (
+        'reference_number', 
+        'member__card_number', 
+        'member__user__first_name', 
+        'member__user__last_name',
+        'transaction_reference'
+    )
+    readonly_fields = ('reference_number', 'created_at', 'confirmed_at')
+    list_select_related = ('member__user', 'group', 'confirmed_by')
+    list_per_page = 20
+    actions = [confirm_manual_payments, reject_manual_payments]
+    
+    fieldsets = (
+        ('Payment Information', {
+            'fields': (
+                'member',
+                'amount',
+                'payment_type',
+                'status',
+                'reference_number'
+            )
+        }),
+        ('Bank Transfer Details', {
+            'fields': (
+                'bank_name',
+                'transaction_reference',
+                'transfer_date',
+            )
+        }),
+        ('Admin Section', {
+            'fields': (
+                'admin_notes',
+                'confirmed_by',
+                'confirmed_at',
+            )
+        }),
+        ('System Information', {
+            'fields': (
+                'group',
+                'created_at',
+            )
+        }),
+    )
+    
+    def get_member_name(self, obj):
+        return f"{obj.member.user.first_name} {obj.member.user.last_name}"
+    get_member_name.short_description = 'Member'
+    get_member_name.admin_order_field = 'member__user__first_name'
+    
+    def get_member_card_number(self, obj):
+        return obj.member.card_number
+    get_member_card_number.short_description = 'Card Number'
+    get_member_card_number.admin_order_field = 'member__card_number'
+    
+    def get_confirmed_by(self, obj):
+        return obj.confirmed_by.username if obj.confirmed_by else "Pending"
+    get_confirmed_by.short_description = 'Confirmed By'
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "member" and request.user.role == 'group_admin':
+            if hasattr(request.user, 'managed_group') and request.user.managed_group:
+                kwargs["queryset"] = Member.objects.filter(group=request.user.managed_group)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 # ==================== MEMBER ADMIN ====================
 @admin.register(Member)
@@ -165,16 +262,30 @@ class MemberAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
 # ==================== COOPERATIVE GROUP ADMIN ====================
 @admin.register(CooperativeGroup)
 class CooperativeGroupAdmin(admin.ModelAdmin):
-    list_display = ('name', 'get_admin_count', 'flutterwave_subaccount_id', 'get_member_count', 'is_active', 'created_at')
+    list_display = (
+        'name', 
+        'bank_name',
+        'account_number', 
+        'account_name',  # ADDED: Now showing account name
+        'get_admin_count', 
+        'get_member_count', 
+        'is_active', 
+        'created_at'
+    )
     list_filter = ('is_active', 'created_at')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'bank_name', 'account_number', 'account_name')  # ADDED: account_name to search
     readonly_fields = ('created_at', 'get_admin_count', 'get_member_count')
     list_per_page = 20
-    list_editable = ('flutterwave_subaccount_id', 'is_active')
+    
+    # ADDED: Make bank details editable in list view
+    list_editable = ('bank_name', 'account_number', 'account_name', 'is_active')
     
     fieldsets = (
         ('Group Information', {
             'fields': ('name', 'description', 'is_active')
+        }),
+        ('Bank Account Details', {
+            'fields': ('bank_name', 'account_number', 'account_name')
         }),
         ('Statistics', {
             'fields': ('get_admin_count', 'get_member_count', 'created_at')
@@ -197,7 +308,6 @@ class CooperativeGroupAdmin(admin.ModelAdmin):
             else:
                 return qs.none()
         return qs
-
 # ==================== PAYMENT ADMIN ====================
 @admin.register(Payment)
 class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
@@ -208,6 +318,7 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         'amount',
         'payment_method',
         'is_successful',
+        'has_manual_payment',
         'created_at',
         'paid_at'
     )
@@ -216,11 +327,10 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         'member__user__first_name',
         'member__user__last_name',
         'member__card_number',
-        'paystack_reference',
         'member__group__name'
     )
     readonly_fields = ('created_at', 'paid_at')
-    list_select_related = ('member__user', 'member__group')
+    list_select_related = ('member__user', 'member__group', 'manual_payment')
     list_per_page = 20
     actions = [mark_payment_successful]
     
@@ -230,12 +340,13 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
                 'member',
                 'amount',
                 'payment_method',
-                'is_successful'
+                'is_successful',
+                'manual_payment'
             )
         }),
         ('Payment Details', {
             'fields': (
-                'paystack_reference',
+                'card_number_reference',
                 'created_at',
                 'paid_at'
             )
@@ -251,6 +362,11 @@ class PaymentAdmin(GroupAdminRestrictionMixin, admin.ModelAdmin):
         return obj.member.group.name if obj.member.group else "No Group"
     get_member_group.short_description = 'Member Group'
     get_member_group.admin_order_field = 'member__group__name'
+    
+    def has_manual_payment(self, obj):
+        return bool(obj.manual_payment)
+    has_manual_payment.short_description = 'Manual Payment'
+    has_manual_payment.boolean = True
 
 # ==================== NEXT OF KIN ADMIN ====================
 @admin.register(NextOfKin)
