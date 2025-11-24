@@ -30,7 +30,7 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
-  const API_URL = "https://irorunde1-production.up.railway.app/api/";
+  const API_URL = "https://irorunde1-production.up.railway.app/api";
   const API_BASE = `${API_URL}/`;
 
   useEffect(() => {
