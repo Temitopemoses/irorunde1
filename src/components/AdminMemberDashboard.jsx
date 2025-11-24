@@ -30,7 +30,7 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
-const API_URL = "https://irorunde1-production.up.railway.app/api";
+ const API_URL = "https://irorunde1-production.up.railway.app/api";
   const API_BASE = `${API_URL}/`;
 
   useEffect(() => {
@@ -232,17 +232,6 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
       if (isTemporaryDeposit) {
         console.log('Handling temporary fixed deposit...');
         
-        // KEY FIX: Persist collection status in localStorage
-        const collectedDepositsKey = `collectedFixedDeposits_${memberId}`;
-        const collectedDeposits = JSON.parse(localStorage.getItem(collectedDepositsKey) || '[]');
-        
-        // Add this deposit to collected list if not already there
-        if (!collectedDeposits.includes(fixedDepositId)) {
-          collectedDeposits.push(fixedDepositId);
-          localStorage.setItem(collectedDepositsKey, JSON.stringify(collectedDeposits));
-          console.log('Added to collected deposits list:', collectedDeposits);
-        }
-        
         // Create updated deposits array
         const updatedDeposits = memberFixedDeposits.map(fd => {
           const fdId = fd.id?.toString();
@@ -287,6 +276,21 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
           };
         });
         
+        // FIXED: Simple notification to member dashboard - NO REFRESH
+        const updateData = {
+          memberId: memberId,
+          timestamp: Date.now(),
+          action: 'collected',
+          depositId: fixedDepositId,
+          amount: fixedDeposit.amount,
+          type: 'fixed_deposit_update'
+        };
+        
+        // Only use localStorage notification - NO triggers that cause refresh
+        localStorage.setItem('member_dashboard_update', JSON.stringify(updateData));
+        
+        console.log('Notified member dashboard - NO REFRESH TRIGGERED');
+        
         alert("✅ Fixed deposit marked as collected!");
         
       } else {
@@ -323,6 +327,19 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
 
         if (success) {
           alert("✅ Fixed deposit marked as collected!");
+          
+          // FIXED: Simple notification only - NO REFRESH
+          const updateData = {
+            memberId: memberId,
+            timestamp: Date.now(),
+            action: 'collected',
+            depositId: fixedDepositId,
+            amount: fixedDeposit.amount,
+            type: 'fixed_deposit_update'
+          };
+          
+          // Only use localStorage notification - NO triggers that cause refresh
+          localStorage.setItem('member_dashboard_update', JSON.stringify(updateData));
           
           // Update local state immediately
           const updatedDeposits = memberFixedDeposits.map(fd => {
@@ -361,6 +378,8 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
             };
           });
           
+          console.log('Notified member dashboard - NO REFRESH TRIGGERED');
+          
         } else {
           alert("Unable to collect fixed deposit via API. Please try again.");
         }
@@ -368,59 +387,6 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
     } catch (error) {
       console.error("Fixed deposit collection error:", error);
       alert("Error collecting fixed deposit. Please try again.");
-    }
-  };
-
-// Also update your createFixedDepositsFromPaymentHistory function
-const createFixedDepositsFromPaymentHistory = async () => {
-    try {
-      console.log('Creating fixed deposits from payment history...');
-      console.log('Current paymentHistory state:', paymentHistory);
-      
-      const fixedDepositPayments = paymentHistory.filter(payment => 
-        payment.payment_type === 'fixed_deposit' && 
-        (payment.status === 'confirmed' || payment.is_successful)
-      );
-
-      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
-
-      // KEY FIX: Get collected deposits from localStorage
-      const collectedDepositsKey = `collectedFixedDeposits_${memberId}`;
-      const collectedDeposits = JSON.parse(localStorage.getItem(collectedDepositsKey) || '[]');
-      console.log('Previously collected deposits:', collectedDeposits);
-
-      if (fixedDepositPayments.length > 0) {
-        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => {
-          const tempId = `temp-fd-${payment.id || index}`;
-          const isCollected = collectedDeposits.includes(tempId);
-          
-          return {
-            id: tempId,
-            amount: payment.amount,
-            created_at: payment.date || payment.created_at,
-            is_active: !isCollected, // Set to false if collected
-            duration_months: 12,
-            interest_rate: 0,
-            member: memberId,
-            payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
-            _source: 'payment_history',
-            // Add collection info if collected
-            ...(isCollected && {
-              collected_at: new Date().toISOString(),
-              status: 'collected'
-            })
-          };
-        });
-
-        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
-        setMemberFixedDeposits(fixedDepositsFromPayments);
-      } else {
-        console.log('No fixed deposit payments found in payment history');
-        setMemberFixedDeposits([]);
-      }
-    } catch (err) {
-      console.error('Error creating fixed deposits from payment history:', err);
-      setMemberFixedDeposits([]);
     }
   };
 
@@ -450,8 +416,43 @@ const createFixedDepositsFromPaymentHistory = async () => {
     return 0;
   };
 
-  // Duplicate fallback removed — using the updated createFixedDepositsFromPaymentHistory implementation above
-  // (The original fallback implementation was removed to avoid redeclaration of the function.)
+  // Create fixed deposits from payment history as fallback
+  const createFixedDepositsFromPaymentHistory = async () => {
+    try {
+      console.log('Creating fixed deposits from payment history...');
+      console.log('Current paymentHistory state:', paymentHistory);
+      
+      const fixedDepositPayments = paymentHistory.filter(payment => 
+        payment.payment_type === 'fixed_deposit' && 
+        (payment.status === 'confirmed' || payment.is_successful)
+      );
+
+      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
+
+      if (fixedDepositPayments.length > 0) {
+        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
+          id: `temp-fd-${payment.id || index}`,
+          amount: payment.amount,
+          created_at: payment.date || payment.created_at,
+          is_active: true,
+          duration_months: 12,
+          interest_rate: 0,
+          member: memberId,
+          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+          _source: 'payment_history'
+        }));
+
+        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
+        setMemberFixedDeposits(fixedDepositsFromPayments);
+      } else {
+        console.log('No fixed deposit payments found in payment history');
+        setMemberFixedDeposits([]);
+      }
+    } catch (err) {
+      console.error('Error creating fixed deposits from payment history:', err);
+      setMemberFixedDeposits([]);
+    }
+  };
 
   // Refresh fixed deposits manually
   const refreshFixedDeposits = async () => {
