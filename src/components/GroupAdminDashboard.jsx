@@ -15,7 +15,7 @@ const GroupAdminDashboard = () => {
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
-  const API_BASE = 'http://127.0.0.1:8000/api/';
+  const API_BASE = 'https://irorunde1-production.up.railway.app/api/';
 
   useEffect(() => {
     // FIXED: Use the correct localStorage keys from login

@@ -23,7 +23,7 @@ const GroupAdminManagement = () => {
   const fetchGroupAdmins = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://127.0.0.1:8000/apigroup-admins/', {
+      const response = await fetch('https://irorunde1-production.up.railway.app/api/apigroup-admins/', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -41,7 +41,7 @@ const GroupAdminManagement = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/apiaccounts/groups/');
+      const response = await fetch('https://irorunde1-production.up.railway.app/api/apiaccounts/groups/');
       if (response.ok) {
         const data = await response.json();
         setGroups(data);
@@ -57,7 +57,7 @@ const GroupAdminManagement = () => {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('http://127.0.0.1:8000/apigroup-admins/create/', {
+      const response = await fetch('https://irorunde1-production.up.railway.app/api/apigroup-admins/create/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -99,7 +99,7 @@ const GroupAdminManagement = () => {
 
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch(`http://127.0.0.1:8000/apigroup-admins/${adminId}/`, {
+      const response = await fetch(`https://irorunde1-production.up.railway.app/api/apigroup-admins/${adminId}/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

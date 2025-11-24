@@ -30,7 +30,7 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
-  const API_BASE = 'http://127.0.0.1:8000/api/';
+  const API_BASE = 'https://irorunde1-production.up.railway.app/api/';
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -372,7 +372,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
   // Update group account endpoint - with better error handling
   const fetchGroupAccount = async (token) => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/payments/group-account/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/apipayments/group-account/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },

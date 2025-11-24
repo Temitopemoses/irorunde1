@@ -16,7 +16,7 @@ const CreateAdminForm = () => {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/apiaccounts/admin/register/', formData);
+      const response = await axios.post('https://irorunde1-production.up.railway.app/api/apiaccounts/admin/register/', formData);
       setMessage('✅ Admin created successfully!');
       console.log(response.data);
     } catch (error) {

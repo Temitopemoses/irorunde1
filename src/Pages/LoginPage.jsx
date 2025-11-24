@@ -15,7 +15,7 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/auth/member-login/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/member-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -79,12 +79,12 @@ const LoginPage = () => {
     setLoading(true);
     try {
       // Get CSRF token first
-      const csrfResponse = await fetch("http://127.0.0.1:8000/api/auth/csrf/", { 
+      const csrfResponse = await fetch("https://irorunde1-production.up.railway.app/apiauth/csrf/", { 
         credentials: "include" 
       });
       console.log("CSRF response:", csrfResponse);
       
-      const response = await fetch("http://127.0.0.1:8000/api/auth/group-admin-login/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/group-admin-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -152,11 +152,11 @@ const LoginPage = () => {
     setLoading(true);
     try {
       // Get CSRF token first
-      await fetch("http://127.0.0.1:8000/api/auth/csrf/", { 
+      await fetch("https://irorunde1-production.up.railway.app/apiauth/csrf/", { 
         credentials: "include" 
       });
       
-      const response = await fetch("http://127.0.0.1:8000/api/auth/superadmin-login/", {
+      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/superadmin-login/", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
