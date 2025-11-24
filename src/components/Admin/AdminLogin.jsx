@@ -26,9 +26,9 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'https://irorunde1-production.up.railway.app';
+      const ${API_URL} = import.meta.env.VITE_${API_URL} || 'https://irorunde1-production.up.railway.app';
       
-      const response = await fetch(`${API_URL}/superadmin-login/`, {
+      const response = await fetch(`${${API_URL}}/superadmin-login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

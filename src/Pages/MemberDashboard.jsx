@@ -41,7 +41,7 @@ const MemberDashboard = () => {
         setUserData(JSON.parse(storedUserData));
       }
 
-      const response = await fetch('https://irorunde1-production.up.railway.app/api/user/dashboard/', {
+      const response = await fetch('${API_URL}/user/dashboard/', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -73,7 +73,7 @@ const MemberDashboard = () => {
   const fetchPaymentHistory = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch("https://irorunde1-production.up.railway.app/apiuser/combined-payment-history/", {
+      const response = await fetch("${API_URL}user/combined-payment-history/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -95,7 +95,7 @@ const MemberDashboard = () => {
   const fetchGroupAccount = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch("https://irorunde1-production.up.railway.app/apipayments/group-account/", {
+      const response = await fetch("${API_URL}payments/group-account/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -134,7 +134,7 @@ const MemberDashboard = () => {
     try {
       setLoadingPayment(true);
 
-      const response = await fetch("https://irorunde1-production.up.railway.app/apipayments/manual/", {
+      const response = await fetch("${API_URL}payments/manual/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

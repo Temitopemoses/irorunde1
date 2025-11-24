@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { getCSRFToken } from "../utils/csrf";
 
+// ADD THIS LINE 👇
+const API_URL = "https://irorunde1-production.up.railway.app/api";
+
 const LoginPage = () => {
   const [phone, setPhone] = useState("");
   const [surname, setSurname] = useState("");
@@ -15,7 +18,8 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/member-login/", {
+      // CHANGED: Use API_URL variable instead of hardcoded URL
+      const response = await fetch(`${API_URL}/auth/member-login/`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -38,7 +42,7 @@ const LoginPage = () => {
         throw new Error("Your account is pending approval. Please wait for admin confirmation.");
       }
 
-      // FIXED: Handle both response formats
+      // Handle both response formats
       const accessToken = data.access || data.token;
       const refreshToken = data.refresh;
       const userData = data.user || data;
@@ -79,12 +83,13 @@ const LoginPage = () => {
     setLoading(true);
     try {
       // Get CSRF token first
-      const csrfResponse = await fetch("https://irorunde1-production.up.railway.app/apiauth/csrf/", { 
+      const csrfResponse = await fetch(`${API_URL}/auth/csrf/`, { 
         credentials: "include" 
       });
       console.log("CSRF response:", csrfResponse);
       
-      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/group-admin-login/", {
+      // CHANGED: Use API_URL variable
+      const response = await fetch(`${API_URL}/auth/group-admin-login/`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -110,7 +115,7 @@ const LoginPage = () => {
         throw new Error("Access denied. Group admin access only.");
       }
 
-      // FIXED: Handle both response formats
+      // Handle both response formats
       const accessToken = data.access || data.token;
       const refreshToken = data.refresh;
       const userData = data.user || data;
@@ -152,11 +157,12 @@ const LoginPage = () => {
     setLoading(true);
     try {
       // Get CSRF token first
-      await fetch("https://irorunde1-production.up.railway.app/apiauth/csrf/", { 
+      await fetch(`${API_URL}/auth/csrf/`, { 
         credentials: "include" 
       });
       
-      const response = await fetch("https://irorunde1-production.up.railway.app/apiauth/superadmin-login/", {
+      // CHANGED: Use API_URL variable
+      const response = await fetch(`${API_URL}/auth/superadmin-login/`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -182,7 +188,7 @@ const LoginPage = () => {
         throw new Error("Access denied. Super admin access only.");
       }
 
-      // FIXED: Handle both response formats
+      // Handle both response formats
       const accessToken = data.access || data.token;
       const refreshToken = data.refresh;
       const userData = data.user || data;
@@ -216,6 +222,7 @@ const LoginPage = () => {
       setLoading(false);
     }
   };
+
 
   const handleSubmit = (e) => {
     if (loginType === "member") {

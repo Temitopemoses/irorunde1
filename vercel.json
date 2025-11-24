@@ -13,7 +13,7 @@
     },
     {
       "source": "/api/:path*",
-      "destination": "https://irorunde1-production.up.railway.app/api/api:path*"
+      "destination": "${API_URL}/api:path*"
     },
     {
       "source": "/system-admin/:path*", 

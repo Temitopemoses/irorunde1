@@ -7,7 +7,7 @@ const GroupSummary = () => {
   useEffect(()=>{ fetchData(); },[]);
   const fetchData = async ()=> {
     try {
-      const res = await axios.get('https://irorunde1-production.up.railway.app/api/apimembers/group-summary/', { headers: authHeaders() });
+      const res = await axios.get('${API_URL}/apimembers/group-summary/', { headers: authHeaders() });
       setData(res.data);
     } catch(err){ console.error(err); }
   };

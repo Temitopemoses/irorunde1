@@ -38,7 +38,7 @@ const GroupAdminDashboard = () => {
       
       // Fetch group stats
       const statsResponse = await fetch(
-        `https://irorunde1-production.up.railway.app/api/apiaccounts/group-admin/stats/?group_id=${managedGroup}`,
+        `${API_URL}/api/accounts/group-admin/stats/?group_id=${managedGroup}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -48,7 +48,7 @@ const GroupAdminDashboard = () => {
 
       // Fetch recent members
       const membersResponse = await fetch(
-        `https://irorunde1-production.up.railway.app/api/apiaccounts/group-admin/members/?group_id=${managedGroup}`,
+        `${API_URL}/api/accounts/group-admin/members/?group_id=${managedGroup}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
