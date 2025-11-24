@@ -262,138 +262,108 @@ const MemberDashboardView = () => {
     }
   };
 
-  // FIXED: Handle fixed deposit collection WITHOUT page reload
-  const handleCollectFixedDeposit = async (fixedDepositId) => {
-    const token = localStorage.getItem('accessToken');
+ // FIXED: Handle fixed deposit collection WITHOUT page reload
+const handleCollectFixedDeposit = async (fixedDepositId) => {
+  const token = localStorage.getItem('accessToken');
+  
+  if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
+    return;
+  }
+
+  try {
+    console.log('=== COLLECTING FIXED DEPOSIT ===');
+    console.log('Fixed Deposit ID from click:', fixedDepositId);
+    console.log('Type of Fixed Deposit ID:', typeof fixedDepositId);
     
-    if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
+    // Convert to string for consistent comparison
+    const fixedDepositIdStr = fixedDepositId.toString();
+    
+    const fixedDeposit = memberFixedDeposits.find(fd => {
+      const fdId = fd.id?.toString();
+      return fdId === fixedDepositIdStr;
+    });
+    
+    if (!fixedDeposit) {
+      console.error('Fixed deposit not found!');
+      console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
+      alert("Fixed deposit not found! Please refresh and try again.");
       return;
     }
 
-    try {
-      console.log('=== COLLECTING FIXED DEPOSIT ===');
-      console.log('Fixed Deposit ID from click:', fixedDepositId);
-      console.log('Type of Fixed Deposit ID:', typeof fixedDepositId);
-      
-      // Convert to string for consistent comparison
-      const fixedDepositIdStr = fixedDepositId.toString();
-      
-      const fixedDeposit = memberFixedDeposits.find(fd => {
-        const fdId = fd.id?.toString();
-        return fdId === fixedDepositIdStr;
-      });
-      
-      if (!fixedDeposit) {
-        console.error('Fixed deposit not found!');
-        console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
-        alert("Fixed deposit not found! Please refresh and try again.");
-        return;
-      }
+    console.log('Found fixed deposit:', fixedDeposit);
 
-      console.log('Found fixed deposit:', fixedDeposit);
+    // Check if it's temporary - now using the consistent prefix
+    const isTemporaryDeposit = fixedDepositIdStr.includes('temp-fd-') || 
+                             (fixedDeposit._source && fixedDeposit._source === 'payment_history');
 
-      // Check if it's temporary - now using the consistent prefix
-      const isTemporaryDeposit = fixedDepositIdStr.includes('temp-fd-') || 
-                               (fixedDeposit._source && fixedDeposit._source === 'payment_history');
-
-      if (isTemporaryDeposit) {
-        console.log('Handling temporary fixed deposit...');
-        
-        // Create updated deposits array
-        const updatedDeposits = memberFixedDeposits.map(fd => {
-          const fdId = fd.id?.toString();
-          if (fdId === fixedDepositIdStr) {
-            return { 
-              ...fd, 
-              is_active: false, 
-              collected_at: new Date().toISOString(),
-              status: 'collected'
-            };
-          }
-          return fd;
-        });
-        
-        setMemberFixedDeposits(updatedDeposits);
-        
-        // Calculate new total
-        const activeDeposits = updatedDeposits.filter(fd => fd.is_active === true);
-        const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
-          sum + (parseFloat(getPaymentAmount(deposit)) || 0), 0
-        );
-        
-        setDashboardData(prev => {
-          if (!prev || !prev.financial_summary) return prev;
-          
-          return {
-            ...prev,
-            financial_summary: {
-              ...prev.financial_summary,
-              fixed_deposits: activeDepositsTotal,
-              active_fixed_deposits: activeDepositsTotal
-            }
-          };
-        });
-        
-        alert("✅ Fixed deposit marked as collected!");
-        
-      } else {
-        console.log('Handling real fixed deposit via API...');
-        
-        const response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
+    if (isTemporaryDeposit) {
+      console.log('Handling temporary fixed deposit...');
+      
+      // For temporary deposits, we need to create a record in the backend
+      // to persist the collection status
+      try {
+        const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/create-from-payment/`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            payment_id: fixedDepositIdStr.replace('temp-fd-', ''),
+            amount: fixedDeposit.amount,
+            collected_at: new Date().toISOString(),
+            is_active: false,
+            status: 'collected'
+          }),
         });
         
         if (response.ok) {
+          console.log('Successfully created fixed deposit record in backend');
+          // Refresh fixed deposits from backend to get the new ID
+          await fetchMemberFixedDeposits(memberId, token);
           alert("✅ Fixed deposit marked as collected!");
-          
-          // Update local state immediately
-          const updatedDeposits = memberFixedDeposits.map(fd => {
-            const fdId = fd.id?.toString();
-            if (fdId === fixedDepositIdStr) {
-              return { 
-                ...fd, 
-                is_active: false, 
-                collected_at: new Date().toISOString(),
-                status: 'collected'
-              };
-            }
-            return fd;
-          });
-          
-          setMemberFixedDeposits(updatedDeposits);
-          
-          // Calculate new total
-          const activeDeposits = updatedDeposits.filter(fd => fd.is_active === true);
-          const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
-            sum + (parseFloat(getPaymentAmount(deposit)) || 0), 0
-          );
-          
-          setDashboardData(prev => {
-            if (!prev || !prev.financial_summary) return prev;
-            
-            return {
-              ...prev,
-              financial_summary: {
-                ...prev.financial_summary,
-                fixed_deposits: activeDepositsTotal,
-                active_fixed_deposits: activeDepositsTotal
-              }
-            };
-          });
         } else {
           const errorData = await response.json().catch(() => ({}));
-          alert(errorData.error || "Unable to collect fixed deposit. Please try again.");
+          console.error("Failed to create fixed deposit record:", errorData);
+          alert(errorData.error || "Unable to mark fixed deposit as collected. Please try again.");
         }
+      } catch (error) {
+        console.error("Error creating fixed deposit record:", error);
+        alert("Error marking fixed deposit as collected. Please try again.");
       }
-    } catch (error) {
-      console.error("Fixed deposit collection error:", error);
-      alert("Error collecting fixed deposit. Please try again.");
+      
+    } else {
+      console.log('Handling real fixed deposit via API...');
+      
+      const response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (response.ok) {
+        console.log('Successfully marked real fixed deposit as collected');
+        alert("✅ Fixed deposit marked as collected!");
+        
+        // Refresh fixed deposits from backend to get the updated status
+        await fetchMemberFixedDeposits(memberId, token);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Failed to mark fixed deposit as collected:", errorData);
+        alert(errorData.error || "Unable to collect fixed deposit. Please try again.");
+      }
     }
-  };
+    
+    // Refresh dashboard data to update totals
+    await fetchMemberDashboardData(memberId, token);
+    
+  } catch (error) {
+    console.error("Fixed deposit collection error:", error);
+    alert("Error collecting fixed deposit. Please try again.");
+  }
+};
 
   // FIXED: Calculate active fixed deposits total
   const getActiveFixedDepositsTotal = () => {
