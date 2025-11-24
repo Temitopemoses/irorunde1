@@ -16,7 +16,7 @@ const GroupAdminDashboard = () => {
   const navigate = useNavigate();
 
   // FIXED: Use backticks for template literal
-  const API_BASE = `${API_URL}/`;
+const API_URL = "https://irorunde1-production.up.railway.app/api";
 
   useEffect(() => {
     // FIXED: Use correct localStorage keys from login
