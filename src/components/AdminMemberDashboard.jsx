@@ -30,7 +30,7 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
-  const API_URL = 'API_URL/';
+  const API_BASE = 'API_URL/';
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -51,7 +51,7 @@ const MemberDashboardView = () => {
     try {
       setLoading(true);
       
-      const response = await fetch(`${API_URL}admin/members/${memberId}/dashboard/`, {
+      const response = await fetch(`${API_BASE}admin/members/${memberId}/dashboard/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -84,7 +84,7 @@ const MemberDashboardView = () => {
   // Fetch payment history for member
   const fetchPaymentHistory = async (memberId, token) => {
     try {
-      const response = await fetch(`${API_URL}admin/members/${memberId}/payments/`, {
+      const response = await fetch(`${API_BASE}admin/members/${memberId}/payments/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -107,7 +107,7 @@ const MemberDashboardView = () => {
   // Fetch member loans
   const fetchMemberLoans = async (memberId, token) => {
     try {
-      const response = await fetch(`${API_URL}admin/members/${memberId}/loans/`, {
+      const response = await fetch(`${API_BASE}admin/members/${memberId}/loans/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -130,7 +130,7 @@ const MemberDashboardView = () => {
   try {
     console.log('Fetching fixed deposits for member:', memberId);
     
-    const response = await fetch(`${API_URL}admin/members/${memberId}/fixed-deposits/`, {
+    const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -243,7 +243,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     } else {
       console.log('Handling real fixed deposit via API...');
       
-      const response = await fetch(`${API_URL}admin/fixed-deposits/${fixedDepositId}/collect/`, {
+      const response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -401,7 +401,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     try {
       setLoadingLoan(true);
 
-      const response = await fetch(`${API_URL}admin/members/${memberId}/grant-loan/`, {
+      const response = await fetch(`${API_BASE}admin/members/${memberId}/grant-loan/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -452,7 +452,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     try {
       setLoadingPayment(true);
 
-      const response = await fetch(`${API_URL}admin/members/${memberId}/record-payment/`, {
+      const response = await fetch(`${API_BASE}admin/members/${memberId}/record-payment/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -494,8 +494,8 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     
     try {
       const endpoint = action === 'confirm' 
-        ? `${API_URL}admin/manual-payments/${paymentId}/confirm/`
-        : `${API_URL}admin/manual-payments/${paymentId}/reject/`;
+        ? `${API_BASE}admin/manual-payments/${paymentId}/confirm/`
+        : `${API_BASE}admin/manual-payments/${paymentId}/reject/`;
 
       const response = await fetch(endpoint, {
         method: "POST",
