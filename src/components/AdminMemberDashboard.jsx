@@ -30,7 +30,7 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
- const API_URL = "https://irorunde1-production.up.railway.app/api";
+  const API_URL = "https://irorunde1-production.up.railway.app/api";
   const API_BASE = `${API_URL}/`;
 
   useEffect(() => {
@@ -46,13 +46,6 @@ const MemberDashboardView = () => {
     }
 
     fetchMemberDashboardData(memberId, token);
-    
-    // Add periodic refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchMemberDashboardData(memberId, token);
-    }, 30000);
-    
-    return () => clearInterval(interval);
   }, [memberId, navigate, location]);
 
   const fetchMemberDashboardData = async (memberId, token) => {
@@ -71,30 +64,11 @@ const MemberDashboardView = () => {
         setDashboardData(data);
         setError(null);
         
-        // Fetch data sequentially with error handling for each
-        try {
-          await fetchPaymentHistory(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch payment history:", err);
-        }
-
-        try {
-          await fetchGroupAccount(token);
-        } catch (err) {
-          console.error("Failed to fetch group account:", err);
-        }
-
-        try {
-          await fetchMemberLoans(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch member loans:", err);
-        }
-
-        try {
-          await fetchMemberFixedDeposits(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch fixed deposits:", err);
-        }
+        // Fetch data sequentially
+        await fetchPaymentHistory(memberId, token);
+        await fetchGroupAccount(token);
+        await fetchMemberLoans(memberId, token);
+        await fetchMemberFixedDeposits(memberId, token);
 
       } else {
         const errorData = await response.json();
@@ -122,8 +96,7 @@ const MemberDashboardView = () => {
         setPaymentHistory(data);
         return data;
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load payment history:", response.status, errorData);
+        console.error("Failed to load payment history:", response.status);
         return [];
       }
     } catch (err) {
@@ -145,8 +118,7 @@ const MemberDashboardView = () => {
         const data = await response.json();
         setMemberLoans(data);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load member loans:", response.status, errorData);
+        console.error("Failed to load member loans:", response.status);
       }
     } catch (err) {
       console.error("Member loans fetch error:", err);
@@ -155,120 +127,135 @@ const MemberDashboardView = () => {
 
   // Enhanced fixed deposits fetch with better error handling
   const fetchMemberFixedDeposits = async (memberId, token) => {
-    setLoadingFixedDeposits(true);
-    try {
-      console.log('Fetching fixed deposits for member:', memberId);
-      
-      const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+  setLoadingFixedDeposits(true);
+  try {
+    console.log('Fetching fixed deposits for member:', memberId);
+    
+    const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Fixed deposits data:', data);
-        
-        // Handle the response format based on your Django view
-        let fixedDepositsData = [];
-        
-        if (Array.isArray(data)) {
-          fixedDepositsData = data;
-        } else if (data.results && Array.isArray(data.results)) {
-          fixedDepositsData = data.results;
-        } else if (data.fixed_deposits && Array.isArray(data.fixed_deposits)) {
-          fixedDepositsData = data.fixed_deposits;
-        } else {
-          console.warn("Unexpected fixed deposits API response format:", data);
-          fixedDepositsData = [];
-        }
-        
-        setMemberFixedDeposits(fixedDepositsData);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load fixed deposits:", response.status, errorData);
-        setMemberFixedDeposits([]);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Fixed deposits data:', data);
+      
+      // Handle the response format based on your Django view
+      let fixedDepositsData = [];
+      
+      if (Array.isArray(data)) {
+        fixedDepositsData = data;
+      } else if (data.results && Array.isArray(data.results)) {
+        fixedDepositsData = data.results;
+      } else if (data.fixed_deposits && Array.isArray(data.fixed_deposits)) {
+        fixedDepositsData = data.fixed_deposits;
       }
-    } catch (err) {
-      console.error("Fixed deposit fetch error:", err);
-      setMemberFixedDeposits([]);
-    } finally {
-      setLoadingFixedDeposits(false);
+      
+      setMemberFixedDeposits(fixedDepositsData);
+    } else {
+      console.error("Failed to load fixed deposits:", response.status);
+      // Only create from payment history as a fallback if the API call fails
+      await createFixedDepositsFromPaymentHistory();
     }
-  };
+  } catch (err) {
+    console.error("Fixed deposit fetch error:", err);
+    // Only create from payment history as a fallback if the API call fails
+    await createFixedDepositsFromPaymentHistory();
+  } finally {
+    setLoadingFixedDeposits(false);
+  }
+};
 
   // FIXED: Handle fixed deposit collection WITHOUT page reload
-  const handleCollectFixedDeposit = async (fixedDepositId) => {
-    const token = localStorage.getItem('accessToken');
+const handleCollectFixedDeposit = async (fixedDepositId) => {
+  const token = localStorage.getItem('accessToken');
+  
+  if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
+    return;
+  }
+
+  try {
+    console.log('=== COLLECTING FIXED DEPOSIT ===');
+    console.log('Fixed Deposit ID from click:', fixedDepositId);
+    console.log('Type of Fixed Deposit ID:', typeof fixedDepositId);
     
-    if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
+    // Convert to string for consistent comparison
+    const fixedDepositIdStr = fixedDepositId.toString();
+    
+    const fixedDeposit = memberFixedDeposits.find(fd => {
+      const fdId = fd.id?.toString();
+      return fdId === fixedDepositIdStr;
+    });
+    
+    if (!fixedDeposit) {
+      console.error('Fixed deposit not found!');
+      console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
+      alert("Fixed deposit not found! Please refresh and try again.");
       return;
     }
 
-    try {
-      console.log('=== COLLECTING FIXED DEPOSIT ===');
-      console.log('Fixed Deposit ID from click:', fixedDepositId);
+    console.log('Found fixed deposit:', fixedDeposit);
+
+    // Check if it's temporary - now using the string version
+    const isTemporaryDeposit = fixedDepositIdStr.includes('temp-') || 
+                             (fixedDeposit._source && fixedDeposit._source === 'payment_history');
+
+    if (isTemporaryDeposit) {
+      console.log('Handling temporary fixed deposit...');
       
-      // Convert to string for consistent comparison
-      const fixedDepositIdStr = fixedDepositId.toString();
-      
-      const fixedDeposit = memberFixedDeposits.find(fd => {
+      // Create updated deposits array
+      const updatedDeposits = memberFixedDeposits.map(fd => {
         const fdId = fd.id?.toString();
-        return fdId === fixedDepositIdStr;
+        if (fdId === fixedDepositIdStr) {
+          return { 
+            ...fd, 
+            is_active: false, 
+            collected_at: new Date().toISOString(),
+            status: 'collected'
+          };
+        }
+        return fd;
       });
       
-      if (!fixedDeposit) {
-        console.error('Fixed deposit not found!');
-        console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
-        alert("Fixed deposit not found! Please refresh and try again.");
-        return;
-      }
-
-      console.log('Found fixed deposit:', fixedDeposit);
-
-      // Since all deposits are real, we handle them via API
+      setMemberFixedDeposits(updatedDeposits);
+      
+      // Calculate new total
+      const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
+      const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
+        sum + (parseFloat(deposit.amount) || 0), 0
+      );
+      
+      setDashboardData(prev => {
+        if (!prev || !prev.financial_summary) return prev;
+        
+        return {
+          ...prev,
+          financial_summary: {
+            ...prev.financial_summary,
+            fixed_deposits: activeDepositsTotal,
+            active_fixed_deposits: activeDepositsTotal
+          }
+        };
+      });
+      
+      alert("✅ Fixed deposit marked as collected!");
+      
+    } else {
       console.log('Handling real fixed deposit via API...');
       
-      // Try multiple endpoints in case your API has changed
-      const endpoints = [
-        `${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`,
-        `${API_BASE}fixed-deposits/${fixedDepositId}/collect/`,
-        `${API_BASE}admin/fixed-deposits/${fixedDepositId}/mark-collected/`,
-        `${API_BASE}admin/members/${memberId}/fixed-deposits/${fixedDepositId}/collect/`,
-      ];
-
-      let success = false;
-      let responseData = null;
-
-      for (const endpoint of endpoints) {
-        try {
-          console.log('Trying endpoint:', endpoint);
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          });
-          
-          if (response.ok) {
-            console.log('Success with endpoint:', endpoint);
-            success = true;
-            responseData = await response.json();
-            break;
-          } else {
-            const errorData = await response.json().catch(() => ({}));
-            console.log(`Endpoint ${endpoint} failed with:`, errorData);
-          }
-        } catch (err) {
-          console.log(`Endpoint ${endpoint} error:`, err);
-        }
-      }
-
-      if (success) {
+      const response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      
+      if (response.ok) {
         alert("✅ Fixed deposit marked as collected!");
         
-        // Update local state immediately for UI feedback
+        // Update local state immediately
         const updatedDeposits = memberFixedDeposits.map(fd => {
           const fdId = fd.id?.toString();
           if (fdId === fixedDepositIdStr) {
@@ -284,7 +271,7 @@ const MemberDashboardView = () => {
         
         setMemberFixedDeposits(updatedDeposits);
         
-        // Calculate new total from UPDATED data
+        // Calculate new total
         const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
         const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
           sum + (parseFloat(deposit.amount) || 0), 0
@@ -302,21 +289,15 @@ const MemberDashboardView = () => {
             }
           };
         });
-        
-        // After successful API call, refresh all data to ensure consistency
-        setTimeout(() => {
-          fetchMemberDashboardData(memberId, token);
-        }, 1000);
-        
       } else {
-        alert("Unable to collect fixed deposit via API. Please try again.");
+        alert("Unable to collect fixed deposit. Please try again.");
       }
-    } catch (error) {
-      console.error("Fixed deposit collection error:", error);
-      alert("Error collecting fixed deposit. Please try again.");
     }
-  };
-
+  } catch (error) {
+    console.error("Fixed deposit collection error:", error);
+    alert("Error collecting fixed deposit. Please try again.");
+  }
+};
   // FIXED: Calculate active fixed deposits total
   const getActiveFixedDepositsTotal = () => {
     // Use memberFixedDeposits state as primary source
@@ -343,6 +324,44 @@ const MemberDashboardView = () => {
     return 0;
   };
 
+  // Create fixed deposits from payment history as fallback
+  const createFixedDepositsFromPaymentHistory = async () => {
+    try {
+      console.log('Creating fixed deposits from payment history...');
+      console.log('Current paymentHistory state:', paymentHistory);
+      
+      const fixedDepositPayments = paymentHistory.filter(payment => 
+        payment.payment_type === 'fixed_deposit' && 
+        (payment.status === 'confirmed' || payment.is_successful)
+      );
+
+      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
+
+      if (fixedDepositPayments.length > 0) {
+        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
+          id: `temp-fd-${payment.id || index}`,
+          amount: payment.amount,
+          created_at: payment.date || payment.created_at,
+          is_active: true,
+          duration_months: 12,
+          interest_rate: 0,
+          member: memberId,
+          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+          _source: 'payment_history'
+        }));
+
+        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
+        setMemberFixedDeposits(fixedDepositsFromPayments);
+      } else {
+        console.log('No fixed deposit payments found in payment history');
+        setMemberFixedDeposits([]);
+      }
+    } catch (err) {
+      console.error('Error creating fixed deposits from payment history:', err);
+      setMemberFixedDeposits([]);
+    }
+  };
+
   // Refresh fixed deposits manually
   const refreshFixedDeposits = async () => {
     const token = localStorage.getItem('accessToken');
@@ -354,7 +373,7 @@ const MemberDashboardView = () => {
   // Update group account endpoint - with better error handling
   const fetchGroupAccount = async (token) => {
     try {
-      const response = await fetch(`${API_BASE}payments/group-account/`, {
+      const response = await fetch("https://irorunde1-production.up.railway.app/api/payments/group-account/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -364,8 +383,7 @@ const MemberDashboardView = () => {
         const data = await response.json();
         setGroupAccount(data);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load group account:", response.status, errorData);
+        console.error("Failed to load group account:", response.status);
       }
     } catch (err) {
       console.error("Group account fetch error:", err);
@@ -1155,7 +1173,9 @@ const MemberDashboardView = () => {
                                 <div className="flex justify-between items-start mb-2">
                                   <div>
                                     <h5 className="font-medium text-gray-900">
-                                      Fixed Deposit #{fixedDeposit.id}
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
+                                        ? 'Fixed Deposit (From Payments)' 
+                                        : `Fixed Deposit #${fixedDeposit.id}`}
                                     </h5>
                                     <p className="text-sm text-gray-600">
                                       Created: {new Date(fixedDeposit.created_at).toLocaleDateString()}
@@ -1244,7 +1264,9 @@ const MemberDashboardView = () => {
                                 <div className="flex justify-between items-center">
                                   <div>
                                     <p className="font-medium text-gray-900">
-                                      Fixed Deposit #{fixedDeposit.id}
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
+                                        ? 'Fixed Deposit (From Payments)' 
+                                        : `Fixed Deposit #${fixedDeposit.id}`}
                                     </p>
                                     <p className="text-sm text-gray-600">
                                       Amount: ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
@@ -1444,10 +1466,6 @@ const MemberDashboardView = () => {
                         <div className="flex justify-between">
                           <span className="text-emerald-600 font-medium">Account No:</span>
                           <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-emerald-600 font-medium">Account Name:</span>
-                          <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
                         </div>
                       </div>
                     </div>
@@ -1699,37 +1717,37 @@ const MemberDashboardView = () => {
                     className="block w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors"
                   />
                 </div>
-              </div>
 
-              {/* Loan Information Display */}
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Loan Terms</h4>
-                <div className="space-y-2 text-sm">
-                  {loanType === 'regular' && (
-                    <>
+                {/* Loan Information Display */}
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">Loan Terms</h4>
+                  <div className="space-y-2 text-sm">
+                    {loanType === 'regular' && (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Interest:</span>
+                          <span className="text-green-600">2% every 4 weeks</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>First Interest:</span>
+                          <span>After 4 weeks</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Penalty:</span>
+                          <span className="text-red-600">₦2,500/week if no payment</span>
+                        </div>
+                      </>
+                    )}
+                    {loanType === 'investment' && (
                       <div className="flex justify-between">
                         <span>Interest:</span>
-                        <span className="text-green-600">2% every 4 weeks</span>
+                        <span className="text-purple-600">No interest applied</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>First Interest:</span>
-                        <span>After 4 weeks</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Penalty:</span>
-                        <span className="text-red-600">₦2,500/week if no payment</span>
-                      </div>
-                    </>
-                  )}
-                  {loanType === 'investment' && (
-                    <div className="flex justify-between">
-                      <span>Interest:</span>
-                      <span className="text-purple-600">No interest applied</span>
+                    )}
+                    <div className="flex justify-between font-medium">
+                      <span>Amount Granted:</span>
+                      <span>₦{loanAmount ? parseFloat(loanAmount).toLocaleString() : '0'}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between font-medium">
-                    <span>Amount Granted:</span>
-                    <span>₦{loanAmount ? parseFloat(loanAmount).toLocaleString() : '0'}</span>
                   </div>
                 </div>
               </div>
