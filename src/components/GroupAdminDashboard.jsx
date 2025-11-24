@@ -15,10 +15,11 @@ const GroupAdminDashboard = () => {
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
-  const API_BASE = '${API_URL}/';
+  // FIXED: Use backticks for template literal
+  const API_BASE = `${API_URL}/`;
 
   useEffect(() => {
-    // FIXED: Use the correct localStorage keys from login
+    // FIXED: Use correct localStorage keys from login
     const userData = localStorage.getItem('userData');
     const token = localStorage.getItem('accessToken');
 
@@ -103,175 +104,174 @@ const GroupAdminDashboard = () => {
   };
 
   // FIXED: Use accessToken and correct endpoints
- // FIXED: Use accessToken and correct endpoints
-// FIXED: Enhanced debug version to find calculation issues
-const fetchContributions = async () => {
-  const token = localStorage.getItem('accessToken');
-  try {
-    console.log('Fetching contributions with token:', token);
-    
-    // Use group admin payments endpoint
-    const response = await fetch(`${API_BASE}admin/manual-payments/`, {
-      headers: { 
-        Authorization: `Bearer ${token}`, 
-        'Content-Type': 'application/json' 
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log("✅ RAW API RESPONSE:", data);
+  const fetchContributions = async () => {
+    const token = localStorage.getItem('accessToken');
+    try {
+      console.log('Fetching contributions with token:', token);
       
-      const formatted = Array.isArray(data) ? data.map(payment => ({
-        id: payment.id,
-        member_name: payment.member_name || `${payment.member?.first_name} ${payment.member?.last_name}` || 'Unknown Member',
-        card_number: payment.member_card_number || payment.member?.card_number || 'N/A',
-        amount: parseFloat(payment.amount) || 0, // Ensure it's a number
-        
-        // FIXED: Use the properly formatted date and time from the API
-        date: payment.date || payment.transfer_date || payment.created_at,
-        time: payment.time, // Use the formatted time from the serializer
-        
-        payment_type: payment.payment_type || 'contribution',
-        status: payment.status,
-        bank_name: payment.bank_name,
-        transaction_reference: payment.transaction_reference,
-        
-        // Keep original for debugging
-        created_at: payment.created_at,
-        transfer_date: payment.transfer_date
-      })) : [];
-      
-      console.log("📋 FORMATTED PAYMENTS WITH TIME:", formatted);
-      setContributions(formatted);
+      // Use group admin payments endpoint
+      const response = await fetch(`${API_BASE}admin/manual-payments/`, {
+        headers: { 
+          Authorization: `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
+      });
 
-      // FIXED: Enhanced debugging for payment calculations
-      const debugPaymentCalculations = (payments) => {
-        console.log("🔍 STARTING PAYMENT CALCULATIONS DEBUG");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ RAW API RESPONSE:", data);
         
-        const today = new Date();
-        const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-        
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
-        const monthStart = new Date(currentYear, currentMonth, 1);
-        const monthEnd = new Date(currentYear, currentMonth + 1, 1);
-
-        console.log("📅 DATE RANGES:", {
-          today: today.toISOString(),
-          todayStart: todayStart.toISOString(),
-          todayEnd: todayEnd.toISOString(),
-          monthStart: monthStart.toISOString(),
-          monthEnd: monthEnd.toISOString()
-        });
-
-        // Check all payments
-        payments.forEach((payment, index) => {
-          const paymentDate = payment.date ? new Date(payment.date) : null;
-          const isToday = paymentDate && paymentDate >= todayStart && paymentDate < todayEnd;
-          const isThisMonth = paymentDate && paymentDate >= monthStart && paymentDate < monthEnd;
-          const isConfirmed = payment.status === 'confirmed' || payment.status === 'completed';
+        const formatted = Array.isArray(data) ? data.map(payment => ({
+          id: payment.id,
+          member_name: payment.member_name || `${payment.member?.first_name} ${payment.member?.last_name}` || 'Unknown Member',
+          card_number: payment.member_card_number || payment.member?.card_number || 'N/A',
+          amount: parseFloat(payment.amount) || 0, // Ensure it's a number
           
-          console.log(`Payment ${index + 1}:`, {
-            id: payment.id,
-            amount: payment.amount,
-            status: payment.status,
-            type: payment.payment_type,
-            date: payment.date,
-            time: payment.time, // Added time to debug log
-            parsedDate: paymentDate?.toISOString(),
-            isToday,
-            isThisMonth,
-            isConfirmed,
-            includedInTotals: isConfirmed
+          // FIXED: Use properly formatted date and time from API
+          date: payment.date || payment.transfer_date || payment.created_at,
+          time: payment.time, // Use formatted time from serializer
+          
+          payment_type: payment.payment_type || 'contribution',
+          status: payment.status,
+          bank_name: payment.bank_name,
+          transaction_reference: payment.transaction_reference,
+          
+          // Keep original for debugging
+          created_at: payment.created_at,
+          transfer_date: payment.transfer_date
+        })) : [];
+      
+        console.log("📋 FORMATTED PAYMENTS WITH TIME:", formatted);
+        setContributions(formatted);
+
+        // FIXED: Enhanced debugging for payment calculations
+        const debugPaymentCalculations = (payments) => {
+          console.log("🔍 STARTING PAYMENT CALCULATIONS DEBUG");
+          
+          const today = new Date();
+          const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+          
+          const currentMonth = today.getMonth();
+          const currentYear = today.getFullYear();
+          const monthStart = new Date(currentYear, currentMonth, 1);
+          const monthEnd = new Date(currentYear, currentMonth + 1, 1);
+
+          console.log("📅 DATE RANGES:", {
+            today: today.toISOString(),
+            todayStart: todayStart.toISOString(),
+            todayEnd: todayEnd.toISOString(),
+            monthStart: monthStart.toISOString(),
+            monthEnd: monthEnd.toISOString()
           });
-        });
 
-        // Calculate confirmed payments
-        const confirmedPayments = payments.filter(payment => 
-          payment.status === 'confirmed' || payment.status === 'completed'
-        );
-        
-        console.log("✅ CONFIRMED PAYMENTS:", confirmedPayments);
+          // Check all payments
+          payments.forEach((payment, index) => {
+            const paymentDate = payment.date ? new Date(payment.date) : null;
+            const isToday = paymentDate && paymentDate >= todayStart && paymentDate < todayEnd;
+            const isThisMonth = paymentDate && paymentDate >= monthStart && paymentDate < monthEnd;
+            const isConfirmed = payment.status === 'confirmed' || payment.status === 'completed';
+            
+            console.log(`Payment ${index + 1}:`, {
+              id: payment.id,
+              amount: payment.amount,
+              status: payment.status,
+              type: payment.payment_type,
+              date: payment.date,
+              time: payment.time, // Added time to debug log
+              parsedDate: paymentDate?.toISOString(),
+              isToday,
+              isThisMonth,
+              isConfirmed,
+              includedInTotals: isConfirmed
+            });
+          });
 
-        // Calculate daily payments
-        const dailyPaymentsData = confirmedPayments.filter(payment => {
-          if (!payment.date) return false;
-          const paymentDate = new Date(payment.date);
-          return paymentDate >= todayStart && paymentDate < todayEnd;
-        });
+          // Calculate confirmed payments
+          const confirmedPayments = payments.filter(payment => 
+            payment.status === 'confirmed' || payment.status === 'completed'
+          );
+          
+          console.log("✅ CONFIRMED PAYMENTS:", confirmedPayments);
 
-        console.log("📊 DAILY PAYMENTS:", dailyPaymentsData);
-
-        // Calculate totals
-        const totalContributions = confirmedPayments.reduce((sum, payment) => {
-          const amount = parseFloat(payment.amount) || 0;
-          console.log(`Adding to total: ${amount} from payment ${payment.id}`);
-          return sum + amount;
-        }, 0);
-        
-        const monthlyContributions = confirmedPayments
-          .filter(payment => {
+          // Calculate daily payments
+          const dailyPaymentsData = confirmedPayments.filter(payment => {
             if (!payment.date) return false;
             const paymentDate = new Date(payment.date);
-            return paymentDate >= monthStart && paymentDate < monthEnd;
-          })
-          .reduce((sum, payment) => {
+            return paymentDate >= todayStart && paymentDate < todayEnd;
+          });
+
+          console.log("📊 DAILY PAYMENTS:", dailyPaymentsData);
+
+          // Calculate totals
+          const totalContributions = confirmedPayments.reduce((sum, payment) => {
             const amount = parseFloat(payment.amount) || 0;
-            console.log(`Adding to monthly: ${amount} from payment ${payment.id}`);
+            console.log(`Adding to total: ${amount} from payment ${payment.id}`);
             return sum + amount;
           }, 0);
-        
-        const dailyContributions = dailyPaymentsData.reduce((sum, payment) => {
-          const amount = parseFloat(payment.amount) || 0;
-          console.log(`Adding to daily: ${amount} from payment ${payment.id}`);
-          return sum + amount;
-        }, 0);
+          
+          const monthlyContributions = confirmedPayments
+            .filter(payment => {
+              if (!payment.date) return false;
+              const paymentDate = new Date(payment.date);
+              return paymentDate >= monthStart && paymentDate < monthEnd;
+            })
+            .reduce((sum, payment) => {
+              const amount = parseFloat(payment.amount) || 0;
+              console.log(`Adding to monthly: ${amount} from payment ${payment.id}`);
+              return sum + amount;
+            }, 0);
+          
+          const dailyContributions = dailyPaymentsData.reduce((sum, payment) => {
+            const amount = parseFloat(payment.amount) || 0;
+            console.log(`Adding to daily: ${amount} from payment ${payment.id}`);
+            return sum + amount;
+          }, 0);
 
-        console.log("🎯 FINAL CALCULATIONS:", {
-          totalConfirmedPayments: confirmedPayments.length,
-          totalContributions,
-          monthlyContributions,
-          dailyContributions,
-          dailyCount: dailyPaymentsData.length
-        });
+          console.log("🎯 FINAL CALCULATIONS:", {
+            totalConfirmedPayments: confirmedPayments.length,
+            totalContributions,
+            monthlyContributions,
+            dailyContributions,
+            dailyCount: dailyPaymentsData.length
+          });
 
-        return {
-          confirmedPayments,
-          dailyPaymentsData,
-          totalContributions,
-          monthlyContributions,
-          dailyContributions
+          return {
+            confirmedPayments,
+            dailyPaymentsData,
+            totalContributions,
+            monthlyContributions,
+            dailyContributions
+          };
         };
-      };
 
-      // Run the debug calculations
-      const results = debugPaymentCalculations(formatted);
+        // Run debug calculations
+        const results = debugPaymentCalculations(formatted);
 
-      setDailyPayments(results.dailyPaymentsData);
+        setDailyPayments(results.dailyPaymentsData);
 
-      setStats(prev => ({
-        ...prev,
-        total_contributions: results.totalContributions,
-        monthly_contributions: results.monthlyContributions,
-        daily_contributions: results.dailyContributions,
-        daily_count: results.dailyPaymentsData.length
-      }));
+        setStats(prev => ({
+          ...prev,
+          total_contributions: results.totalContributions,
+          monthly_contributions: results.monthlyContributions,
+          daily_contributions: results.dailyContributions,
+          daily_count: results.dailyPaymentsData.length
+        }));
 
-    } else {
-      console.error('❌ Failed to fetch group admin payments:', response.status);
-      showNotification('Failed to load payment data', 'error');
+      } else {
+        console.error('❌ Failed to fetch group admin payments:', response.status);
+        showNotification('Failed to load payment data', 'error');
+        setContributions([]);
+        setDailyPayments([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching group admin payments:', error);
+      showNotification('Error loading payment data', 'error');
       setContributions([]);
       setDailyPayments([]);
     }
-  } catch (error) {
-    console.error('❌ Error fetching group admin payments:', error);
-    showNotification('Error loading payment data', 'error');
-    setContributions([]);
-    setDailyPayments([]);
-  }
-};
+  };
+
   // FIXED: Fetch pending manual payments with accessToken
   const fetchPendingPayments = async () => {
     const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
@@ -499,7 +499,7 @@ const fetchContributions = async () => {
         </div>
       </header>
 
-      {/* Rest of the component remains the same */}
+      {/* Rest of component remains the same */}
       {/* Navigation Tabs */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -566,7 +566,6 @@ const fetchContributions = async () => {
     </div>
   );
 };
-
 
 // Updated Overview Tab Component with Pending Payments Section
 const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onAddMember, onViewMembers, onConfirmPayment, onRejectPayment }) => {
@@ -663,7 +662,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onA
               Recent Members
             </h3>
           </div>
-          <div className="px-4 py-5 sm:p-6">
+          <div className="px-4 py-5 sm:px-6">
             {recentMembers.length > 0 ? (
               <div className="space-y-4">
                 {recentMembers.slice(0, 5).map((member) => (
@@ -672,7 +671,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onA
                       <p className="font-medium text-gray-900">
                         {member.first_name} {member.last_name}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-gray-600">
                         {member.phone} • Card: {member.card_number}
                       </p>
                     </div>
@@ -708,7 +707,7 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onA
               )}
             </div>
           </div>
-          <div className="px-4 py-5 sm:p-6">
+          <div className="px-4 py-5 sm:px-6">
             {pendingPayments.length > 0 ? (
               <div className="space-y-4">
                 {pendingPayments.slice(0, 3).map((payment) => (
@@ -727,20 +726,6 @@ const OverviewTab = ({ stats, recentMembers, dailyPayments, pendingPayments, onA
                           Submitted: {new Date(payment.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex space-x-2 mt-3">
-                      <button 
-                        onClick={() => onConfirmPayment(payment.id)}
-                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm font-medium transition flex-1"
-                      >
-                        Confirm
-                      </button>
-                      <button 
-                        onClick={() => onRejectPayment(payment.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm font-medium transition flex-1"
-                      >
-                        Reject
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -856,15 +841,11 @@ const PendingPaymentsTab = ({ payments, onConfirm, onReject, onRefresh }) => {
   );
 };
 
-// Keep the existing DailyPaymentsTab, MembersTab, ContributionsTab, ReportsTab, AddMemberModal, and Notification components exactly as they were...
-
-// Daily Payments Tab Component - Updated for card numbers
 // Fixed Daily Payments Tab Component
-// Fixed DailyPaymentsTab component
 const DailyPaymentsTab = ({ payments, onRefresh }) => {
   const today = new Date().toISOString().split('T')[0];
   
-  // Filter payments for today only using the date field from API
+  // Filter payments for today only using date field from API
   const todaysPayments = payments.filter(payment => {
     return payment.date === today;
   });
@@ -873,7 +854,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
 
   return (
     <div className="px-4 py-6">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-medium text-gray-900">
           Today's Payments ({today})
         </h2>
@@ -901,7 +882,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
       </div>
 
       <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
+        <div className="px-4 py-5 sm:px-6">
           {todaysPayments.length > 0 ? (
             <div className="space-y-4">
               {todaysPayments.map((payment) => (
@@ -915,7 +896,7 @@ const DailyPaymentsTab = ({ payments, onRefresh }) => {
                     <div className="text-right">
                       <p className="text-lg font-bold text-green-600">₦{payment.amount?.toLocaleString()}</p>
                       <p className="text-sm text-gray-500">
-                        {/* Use the formatted time from API */}
+                        {/* Use formatted time from API */}
                         {payment.time || 'N/A'}
                       </p>
                     </div>
@@ -946,13 +927,13 @@ const MembersTab = ({ members, onRefresh }) => {
   };
 
  const handleViewMemberDashboard = (member) => {
-  // Updated to match the new Django URL pattern
+  // Updated to match new Django URL pattern
   navigate(`/admin/members/${member.id}/dashboard/`, { state: { member } });
 };
 
   return (
     <div className="px-4 py-6">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-medium text-gray-900">All Members ({members.length})</h2>
         <button
           onClick={onRefresh}
@@ -968,7 +949,7 @@ const MembersTab = ({ members, onRefresh }) => {
             All Members
           </h3>
         </div>
-        <div className="px-4 py-5 sm:p-6">
+        <div className="px-4 py-5 sm:px-6">
           {members.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -1057,7 +1038,7 @@ const ContributionsTab = ({ contributions }) => {
             Contributions Management
           </h3>
         </div>
-        <div className="px-4 py-5 sm:p-6">
+        <div className="px-4 py-5 sm:px-6">
           {contributions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -1108,7 +1089,7 @@ const ReportsTab = () => {
             Reports & Analytics
           </h3>
         </div>
-        <div className="px-4 py-5 sm:p-6">
+        <div className="px-4 py-5 sm:px-6">
           <p className="text-gray-500 text-center py-4">
             Reports and analytics feature coming soon...
           </p>
@@ -1381,7 +1362,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                 </button>
                 <button
                   type="submit"
-                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md disabled:opacity-50 flex items-center"
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md disabled:opacity-50 flex items-center justify-center flex-1"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (

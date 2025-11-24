@@ -32,7 +32,7 @@ const Join = ({ userRole = "member", token = null }) => {
   });
 
   // Base URL for API calls
-  const API_BASE_URL = "http://127.0.0.1:8000";
+const API_URL = "https://irorunde1-production.up.railway.app/api";
 
   // --- fetch groups with account details ---
   useEffect(() => {
@@ -44,9 +44,9 @@ const fetchGroups = async () => {
     
     // Try multiple possible endpoints
     const endpoints = [
-      `${API_BASE_URL}/admin/groups/`,
-      `${API_BASE_URL}/accounts/groups/`,
-      `${API_BASE_URL}/api/groups/`
+      `${API_URL}/admin/groups/`,
+      `${API_URL}/accounts/groups/`,
+      `${API_URL}/api/groups/`
     ];
     
     let groupsData = null;
@@ -196,7 +196,7 @@ const fetchGroups = async () => {
       console.log("🔄 Submitting registration payment...");
 
       // Use the registration payment endpoint (no auth required)
-      const response = await fetch(`${API_BASE_URL}/api/auth/register/`, {
+      const response = await fetch(`${API_URL}/api/auth/register/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -277,9 +277,9 @@ const fetchGroups = async () => {
     // Determine the correct endpoint based on user role
     let url;
     if (userRole === "admin" || userRole === "superadmin") {
-      url = `${API_BASE_URL}/auth/create-member/`;
+      url = `${API_URL}/auth/create-member/`;
     } else {
-      url = `${API_BASE_URL}/auth/register/`;
+      url = `${API_URL}/auth/register/`;
     }
 
     console.log("🔄 Submitting registration to:", url);
