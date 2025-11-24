@@ -15,7 +15,7 @@ const GroupAdminDashboard = () => {
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
   const navigate = useNavigate();
 
-  const API_URL = "https://irorunde1-production.up.railway.app/api/";
+  const API_URL = "https://irorunde1-production.up.railway.app/api";
   const API_BASE = `${API_URL}/`;
 
   useEffect(() => {
