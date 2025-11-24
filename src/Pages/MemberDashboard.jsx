@@ -1,8 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { getCSRFToken } from "../utils/csrf";
-
-// API URL - Change this for different environments
-const API_URL = "https://irorunde1-production.up.railway.app/api";
 
 const MemberDashboard = () => {
   const [userData, setUserData] = useState(null);
@@ -19,25 +15,25 @@ const MemberDashboard = () => {
   const [transferDate, setTransferDate] = useState("");
   const [paymentCategory, setPaymentCategory] = useState("savings");
 
+  const API_URL = "https://irorunde1-production.up.railway.app/api";
+
+
   // Add refresh function
   const refreshAllData = async () => {
     setLoading(true);
-    try {
-      await Promise.all([
-        fetchDashboardData(),
-        fetchPaymentHistory(),
-        fetchGroupAccount()
-      ]);
-    } catch (err) {
-      console.error('Error refreshing data:', err);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([
+      fetchDashboardData(),
+      fetchPaymentHistory(),
+      fetchGroupAccount()
+    ]);
+    setLoading(false);
   };
 
   useEffect(() => {
     refreshAllData();
   }, []);
+
+
 
   const fetchDashboardData = async () => {
     try {
@@ -48,7 +44,7 @@ const MemberDashboard = () => {
         setUserData(JSON.parse(storedUserData));
       }
 
-      const response = await fetch(`${API_URL}/user/dashboard/`, {
+      const response = await fetch(`${API_URL}user/dashboard/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -71,6 +67,8 @@ const MemberDashboard = () => {
     } catch (err) {
       console.error('Error fetching dashboard:', err);
       setError('Network error loading dashboard');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,7 +76,7 @@ const MemberDashboard = () => {
   const fetchPaymentHistory = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch(`${API_URL}/user/combined-payment-history/`, {
+      const response = await fetch(`${API_URL}user/combined-payment-history/`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -100,7 +98,7 @@ const MemberDashboard = () => {
   const fetchGroupAccount = async () => {
     try {
       const token = localStorage.getItem("accessToken");
-      const response = await fetch(`${API_URL}/payments/group-account/`, {
+      const response = await fetch(`${API_URL}payments/group-account/`, {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -139,7 +137,7 @@ const MemberDashboard = () => {
     try {
       setLoadingPayment(true);
 
-      const response = await fetch(`${API_URL}/payments/manual/`, {
+      const response = await fetch(`${API_URL}payments/manual/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -157,7 +155,7 @@ const MemberDashboard = () => {
       const data = await response.json();
 
       if (response.ok) {
-        alert("✅ Payment submitted successfully! Please transfer funds to group account and await admin confirmation.");
+        alert("✅ Payment submitted successfully! Please transfer the funds to the group account and await admin confirmation.");
         
         // Refresh data after a short delay to allow backend processing
         setTimeout(() => {
@@ -186,6 +184,7 @@ const MemberDashboard = () => {
     setTransferDate("");
     setPaymentCategory("savings");
   };
+
   
   // Function to copy account number to clipboard
   const copyToClipboard = (text) => {
@@ -209,31 +208,7 @@ const MemberDashboard = () => {
     window.location.href = '/login';
   };
 
-  // Icons for financial cards
-  const icons = {
-    savings: (
-      <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    loan: (
-      <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    fixed: (
-      <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-    investment: (
-      <svg className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-      </svg>
-    )
-  };
-
-  // Financial Card Component
+  // NEW: Enhanced financial cards with paid amounts
   const FinancialCard = ({ title, amount, paidAmount, icon, color, type = 'default' }) => (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
@@ -265,6 +240,30 @@ const MemberDashboard = () => {
       </div>
     </div>
   );
+
+  // Icons for financial cards
+  const icons = {
+    savings: (
+      <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    loan: (
+      <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    fixed: (
+      <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+    investment: (
+      <svg className="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+      </svg>
+    )
+  };
 
   if (loading) {
     return (
@@ -310,7 +309,7 @@ const MemberDashboard = () => {
           <p className="text-gray-600 mb-4">Unable to load dashboard information</p>
           <button 
             onClick={refreshAllData}
-            className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
+            className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
           >
             Try Again
           </button>
@@ -327,7 +326,7 @@ const MemberDashboard = () => {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
               {/* Passport Photo */}
-              {dashboardData.member_info?.passport_photo ? (
+              {dashboardData.member_info.passport_photo ? (
                 <div className="flex-shrink-0">
                   <img
                     src={dashboardData.member_info.passport_photo}
@@ -362,7 +361,7 @@ const MemberDashboard = () => {
                 <span>{loading ? "Refreshing..." : "Refresh"}</span>
               </button>
               <span className="text-gray-700">
-                {dashboardData.member_info?.name}
+                {dashboardData.member_info.name}
               </span>
               <button
                 onClick={handleLogout}
@@ -382,7 +381,7 @@ const MemberDashboard = () => {
           <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
             <div className="px-4 py-5 sm:p-6">
               <div className="flex items-center space-x-6">
-                {dashboardData.member_info?.passport_photo ? (
+                {dashboardData.member_info.passport_photo ? (
                   <div className="flex-shrink-0">
                     <img
                       src={dashboardData.member_info.passport_photo}
@@ -401,11 +400,11 @@ const MemberDashboard = () => {
                 )}
                 <div>
                   <h3 className="text-lg leading-6 font-medium text-gray-900">
-                    Welcome back, {dashboardData.member_info?.name}!
+                    Welcome back, {dashboardData.member_info.name}!
                   </h3>
                   <div className="mt-2 max-w-xl text-sm text-gray-500">
                     <p>You are successfully logged in to your Irorunde member dashboard.</p>
-                    {!dashboardData.member_info?.passport_photo && (
+                    {!dashboardData.member_info.passport_photo && (
                       <p className="text-amber-600 mt-1">
                         No passport photo uploaded yet.
                       </p>
@@ -465,13 +464,13 @@ const MemberDashboard = () => {
                 <div className="flex items-center">
                   <div className="flex-shrink-0 bg-amber-100 rounded-md p-3">
                     <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0C1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                     </svg>
                   </div>
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Card number</dt>
-                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info?.card_number}</dd>
+                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.card_number}</dd>
                     </dl>
                   </div>
                 </div>
@@ -490,7 +489,7 @@ const MemberDashboard = () => {
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Group</dt>
-                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info?.group}</dd>
+                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.group}</dd>
                     </dl>
                   </div>
                 </div>
@@ -509,7 +508,7 @@ const MemberDashboard = () => {
                   <div className="ml-5 w-0 flex-1">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Status</dt>
-                      <dd className="text-lg font-medium text-gray-900 capitalize">{dashboardData.member_info?.status}</dd>
+                      <dd className="text-lg font-medium text-gray-900 capitalize">{dashboardData.member_info.status}</dd>
                     </dl>
                   </div>
                 </div>
@@ -529,7 +528,7 @@ const MemberDashboard = () => {
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Passport Photo</dt>
                       <dd className="text-lg font-medium text-gray-900">
-                        {dashboardData.member_info?.has_photo ? 'Uploaded' : 'Not Uploaded'}
+                        {dashboardData.member_info.has_photo ? 'Uploaded' : 'Not Uploaded'}
                       </dd>
                     </dl>
                   </div>
@@ -691,229 +690,229 @@ const MemberDashboard = () => {
         </div>
       </main>
 
-      {/* Payment Modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Make a Payment</h2>
-                  <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
-                </div>
-                <button
-                  onClick={handleCloseModal}
-                  className="text-white hover:text-amber-200 transition-colors"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+      {/* UPDATED: Modern Payment Modal */}
+{showPaymentModal && (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-white">Make a Payment</h2>
+            <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
+          </div>
+          <button
+            onClick={handleCloseModal}
+            className="text-white hover:text-amber-200 transition-colors"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="p-6 max-h-[70vh] overflow-y-auto">
+        {/* Group Account Card */}
+        {groupAccount && (
+          <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
+            <div className="flex items-start space-x-3">
+              <div className="bg-emerald-100 rounded-lg p-2">
+                <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
               </div>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
-              {/* Group Account Card */}
-              {groupAccount && (
-                <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
-                  <div className="flex items-start space-x-3">
-                    <div className="bg-emerald-100 rounded-lg p-2">
-                      <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-emerald-800 text-sm mb-2">Transfer to Group Account</h3>
-                      <div className="space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-emerald-600 font-medium">Bank:</span>
-                          <span className="text-emerald-900">{groupAccount.bank_name || "Not set"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-emerald-600 font-medium">Account No:</span>
-                          <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-emerald-600 font-medium">Account Name:</span>
-                          <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
-                        </div>
-                      </div>
-                    </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-emerald-800 text-sm mb-2">Transfer to Group Account</h3>
+                <div className="space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Bank:</span>
+                    <span className="text-emerald-900">{groupAccount.bank_name || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Account No:</span>
+                    <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-emerald-600 font-medium">Account Name:</span>
+                    <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
                   </div>
                 </div>
-              )}
-
-              {/* Payment Category Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  What are you paying for?
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { value: "savings", label: "Savings", icon: "💰", color: "green" },
-                    { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
-                    { value: "outstanding_balance", label: "Outstanding Balance", icon: "⚡", color: "yellow" },
-                    { value: "investment_loan", label: "Investment Loan", icon: "📈", color: "purple" }
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setPaymentCategory(option.value)}
-                      className={`p-3 rounded-xl border-2 transition-all duration-200 ${
-                        paymentCategory === option.value
-                          ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
-                          : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="text-2xl mb-1">{option.icon}</div>
-                      <div className="text-xs font-medium text-gray-700">{option.label}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Amount Input */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Amount (₦)
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-500 font-medium">₦</span>
-                  </div>
-                  <input
-                    type="number"
-                    placeholder="Enter amount (min: 1,100)"
-                    min="1100"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                    required
-                  />
-                </div>
-                {amount && parseFloat(amount) < 1100 && (
-                  <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
-                )}
-              </div>
-
-              {/* Bank Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                {/* Bank Name */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Your Bank
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="e.g., First Bank"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {/* Transfer Date */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Transfer Date
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="date"
-                      value={transferDate}
-                      onChange={(e) => setTransferDate(e.target.value)}
-                      className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Transaction Reference */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Transaction Reference
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0C1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Enter your name as reference"
-                    value={transactionReference}
-                    onChange={(e) => setTransactionReference(e.target.value)}
-                    className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                    required
-                  />
-                </div>
-                <p className="text-gray-500 text-xs mt-2">Use your full name as it appears on your bank account</p>
-              </div>
-
-              {/* Instructions */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-                <div className="flex items-start space-x-3">
-                  <div className="bg-blue-100 rounded-lg p-2">
-                    <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-blue-800 text-sm mb-2">Important Instructions</h4>
-                    <ul className="text-blue-700 text-xs space-y-1">
-                      <li>• Transfer exact amount to group account</li>
-                      <li>• Use your name as transfer reference</li>
-                      <li>• Payments show as pending until admin confirmation</li>
-                      <li>• Confirmation typically takes 24 hours</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-              <div className="flex space-x-3">
-                <button
-                  onClick={handleCloseModal}
-                  className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleManualPayment}
-                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
-                >
-                  {loadingPayment ? (
-                    <div className="flex items-center justify-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      <span>Submitting...</span>
-                    </div>
-                  ) : (
-                    "Submit Payment"
-                  )}
-                </button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Payment Category Selection */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-3">
+            What are you paying for?
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { value: "savings", label: "Savings", icon: "💰", color: "green" },
+              { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
+              { value: "outstanding_balance", label: "Outstanding Balance", icon: "⚡", color: "yellow" },
+              { value: "investment_loan", label: "Investment Loan", icon: "📈", color: "purple" }
+            ].map((option) => (
+              <button
+                key={option.value}
+                onClick={() => setPaymentCategory(option.value)}
+                className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                  paymentCategory === option.value
+                    ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
+                    : "border-gray-200 bg-white hover:border-gray-300"
+                }`}
+              >
+                <div className="text-2xl mb-1">{option.icon}</div>
+                <div className="text-xs font-medium text-gray-700">{option.label}</div>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+
+        {/* Amount Input */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Amount (₦)
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <span className="text-gray-500 font-medium">₦</span>
+            </div>
+            <input
+              type="number"
+              placeholder="Enter amount (min: 1,100)"
+              min="1100"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              required
+            />
+          </div>
+          {amount && parseFloat(amount) < 1100 && (
+            <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
+          )}
+        </div>
+
+        {/* Bank Details Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* Bank Name */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Your Bank
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="e.g., First Bank"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Transfer Date */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Transfer Date
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <input
+                type="date"
+                value={transferDate}
+                onChange={(e) => setTransferDate(e.target.value)}
+                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction Reference */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Transaction Reference
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Enter your name as reference"
+              value={transactionReference}
+              onChange={(e) => setTransactionReference(e.target.value)}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+              required
+            />
+          </div>
+          <p className="text-gray-500 text-xs mt-2">Use your full name as it appears on your bank account</p>
+        </div>
+
+        {/* Instructions */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div className="flex items-start space-x-3">
+            <div className="bg-blue-100 rounded-lg p-2">
+              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-blue-800 text-sm mb-2">Important Instructions</h4>
+              <ul className="text-blue-700 text-xs space-y-1">
+                <li>• Transfer exact amount to the group account</li>
+                <li>• Use your name as transfer reference</li>
+                <li>• Payments show as pending until admin confirmation</li>
+                <li>• Confirmation typically takes 24 hours</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+        <div className="flex space-x-3">
+          <button
+            onClick={handleCloseModal}
+            className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleManualPayment}
+            disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
+          >
+            {loadingPayment ? (
+              <div className="flex items-center justify-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span>Submitting...</span>
+              </div>
+            ) : (
+              "Submit Payment"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };
