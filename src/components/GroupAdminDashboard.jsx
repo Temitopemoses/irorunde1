@@ -61,7 +61,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
       const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
       console.log('Fetching dashboard data with token:', token);
       
-      const membersResponse = await fetch(`${API_BASE}group-admin/members/`, {
+      const membersResponse = await fetch(`${API_URL}group-admin/members/`, {
         headers: { 
           Authorization: `Bearer ${token}`, 
           'Content-Type': 'application/json' 
@@ -110,7 +110,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
       console.log('Fetching contributions with token:', token);
       
       // Use group admin payments endpoint
-      const response = await fetch(`${API_BASE}admin/manual-payments/`, {
+      const response = await fetch(`${API_URL}admin/manual-payments/`, {
         headers: { 
           Authorization: `Bearer ${token}`, 
           'Content-Type': 'application/json' 
@@ -278,7 +278,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
     try {
       console.log('Fetching pending payments with token:', token);
       
-      const response = await fetch(`${API_BASE}admin/manual-payments/`, {
+      const response = await fetch(`${API_URL}admin/manual-payments/`, {
         headers: { 
           Authorization: `Bearer ${token}`, 
           'Content-Type': 'application/json' 
@@ -326,7 +326,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
     try {
       console.log('Confirming payment with token:', token);
       
-      const response = await fetch(`${API_BASE}admin/manual-payments/${paymentId}/confirm/`, {
+      const response = await fetch(`${API_URL}admin/manual-payments/${paymentId}/confirm/`, {
         method: 'POST',
         headers: { 
           Authorization: `Bearer ${token}`, 
@@ -360,7 +360,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
     }
 
     try {
-      const response = await fetch(`${API_BASE}admin/manual-payments/${paymentId}/reject/`, {
+      const response = await fetch(`${API_URL}admin/manual-payments/${paymentId}/reject/`, {
         method: 'POST',
         headers: { 
           Authorization: `Bearer ${token}`, 
@@ -384,9 +384,9 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
 
   const tryAlternativeEndpoints = async (token) => {
     const endpoints = [
-      `${API_BASE}accounts/members/`,
-      `${API_BASE}members/`,
-      `${API_BASE}group-admin/members/`
+      `${API_URL}accounts/members/`,
+      `${API_URL}members/`,
+      `${API_URL}group-admin/members/`
     ];
     
     for (const endpoint of endpoints) {
@@ -421,7 +421,7 @@ const API_URL = "https://irorunde1-production.up.railway.app/api";
     });
 
     try {
-      const response = await fetch(`${API_BASE}group-admin/members/create/`, {
+      const response = await fetch(`${API_URL}group-admin/members/create/`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: memberData
