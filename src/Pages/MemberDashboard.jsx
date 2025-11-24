@@ -15,7 +15,7 @@ const MemberDashboard = () => {
   const [transferDate, setTransferDate] = useState("");
   const [paymentCategory, setPaymentCategory] = useState("savings");
 
-  const API_URL = "https://irorunde1-production.up.railway.app/api";
+  const API_URL = "https://irorunde1-production.up.railway.app/api/";
 
 
   // Add refresh function
