@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 
-// Constants
-const MINIMUM_CONTRIBUTION = 1100;
-const API_URL = "https://irorunde1-production.up.railway.app/api";
-const API_BASE = `${API_URL}/`;
-
-// Helper functions
-const getPaymentAmount = (payment) => payment.amount || payment.deposit_amount || 0;
-const getPaymentReference = (payment) => payment.reference_number || payment.tx_ref || payment.card_number_reference || 'N/A';
-
 const MemberDashboardView = () => {
   const { memberId } = useParams();
   const navigate = useNavigate();
@@ -39,8 +30,9 @@ const MemberDashboardView = () => {
   const [loadingLoan, setLoadingLoan] = useState(false);
   const [memberLoans, setMemberLoans] = useState([]);
 
+  const API_BASE = 'http://127.0.0.1:8000/api/';
+
   useEffect(() => {
-    let isMounted = true;
     const token = localStorage.getItem('accessToken');
     
     if (!token) {
@@ -52,68 +44,7 @@ const MemberDashboardView = () => {
       setMemberData(location.state.member);
     }
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        const response = await fetch(`${API_BASE}admin/members/${memberId}/dashboard/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (response.ok && isMounted) {
-          const data = await response.json();
-          setDashboardData(data);
-          setError(null);
-          
-          // Fetch data sequentially with error handling for each
-          try {
-            await fetchPaymentHistory(memberId, token);
-          } catch (err) {
-            console.error("Failed to fetch payment history:", err);
-          }
-
-          try {
-            await fetchGroupAccount(token);
-          } catch (err) {
-            console.error("Failed to fetch group account:", err);
-          }
-
-          try {
-            await fetchMemberLoans(memberId, token);
-          } catch (err) {
-            console.error("Failed to fetch member loans:", err);
-          }
-
-          try {
-            await fetchMemberFixedDeposits(memberId, token);
-          } catch (err) {
-            console.error("Failed to fetch fixed deposits:", err);
-          }
-
-        } else if (isMounted) {
-          const errorData = await response.json().catch(() => ({}));
-          setError(errorData.error || 'Failed to load member dashboard');
-        }
-      } catch (err) {
-        console.error('Error fetching member dashboard:', err);
-        if (isMounted) {
-          setError('Network error loading member dashboard');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchData();
-    
-    return () => {
-      isMounted = false;
-    };
+    fetchMemberDashboardData(memberId, token);
   }, [memberId, navigate, location]);
 
   const fetchMemberDashboardData = async (memberId, token) => {
@@ -132,33 +63,14 @@ const MemberDashboardView = () => {
         setDashboardData(data);
         setError(null);
         
-        // Fetch data sequentially with error handling for each
-        try {
-          await fetchPaymentHistory(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch payment history:", err);
-        }
-
-        try {
-          await fetchGroupAccount(token);
-        } catch (err) {
-          console.error("Failed to fetch group account:", err);
-        }
-
-        try {
-          await fetchMemberLoans(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch member loans:", err);
-        }
-
-        try {
-          await fetchMemberFixedDeposits(memberId, token);
-        } catch (err) {
-          console.error("Failed to fetch fixed deposits:", err);
-        }
+        // Fetch data sequentially
+        await fetchPaymentHistory(memberId, token);
+        await fetchGroupAccount(token);
+        await fetchMemberLoans(memberId, token);
+        await fetchMemberFixedDeposits(memberId, token);
 
       } else {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         setError(errorData.error || 'Failed to load member dashboard');
       }
     } catch (err) {
@@ -183,8 +95,7 @@ const MemberDashboardView = () => {
         setPaymentHistory(data);
         return data;
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load payment history:", response.status, errorData);
+        console.error("Failed to load payment history:", response.status);
         return [];
       }
     } catch (err) {
@@ -206,13 +117,10 @@ const MemberDashboardView = () => {
         const data = await response.json();
         setMemberLoans(data);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load member loans:", response.status, errorData);
-        setMemberLoans([]);
+        console.error("Failed to load member loans:", response.status);
       }
     } catch (err) {
       console.error("Member loans fetch error:", err);
-      setMemberLoans([]);
     }
   };
 
@@ -222,155 +130,305 @@ const MemberDashboardView = () => {
     try {
       console.log('Fetching fixed deposits for member:', memberId);
       
-      const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+      // Try multiple possible endpoints
+      const endpoints = [
+        `${API_BASE}admin/members/${memberId}/fixed-deposits/`,
+        `${API_BASE}fixed-deposits/member/${memberId}/`,
+        `${API_BASE}members/${memberId}/fixed-deposits/`,
+        `${API_BASE}fixed-deposits/?member=${memberId}`,
+        `${API_BASE}admin/fixed-deposits/?member=${memberId}`
+      ];
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Fixed deposits data:', data);
-        
-        // Handle the response format based on your Django view
-        let fixedDepositsData = [];
-        
-        if (Array.isArray(data)) {
-          fixedDepositsData = data;
-        } else if (data.results && Array.isArray(data.results)) {
-          fixedDepositsData = data.results;
-        } else if (data.fixed_deposits && Array.isArray(data.fixed_deposits)) {
-          fixedDepositsData = data.fixed_deposits;
-        } else {
-          console.warn("Unexpected fixed deposits API response format:", data);
-          fixedDepositsData = [];
+      let fixedDepositsData = [];
+      let success = false;
+
+      for (const endpoint of endpoints) {
+        try {
+          console.log('Trying endpoint:', endpoint);
+          const response = await fetch(endpoint, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Fixed deposits data from', endpoint, ':', data);
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+              fixedDepositsData = data;
+            } else if (data.results && Array.isArray(data.results)) {
+              fixedDepositsData = data.results;
+            } else if (data.fixed_deposits && Array.isArray(data.fixed_deposits)) {
+              fixedDepositsData = data.fixed_deposits;
+            } else if (data.data && Array.isArray(data.data)) {
+              fixedDepositsData = data.data;
+            }
+            
+            if (fixedDepositsData.length > 0) {
+              console.log('Found fixed deposits via API:', fixedDepositsData);
+              setMemberFixedDeposits(fixedDepositsData);
+              success = true;
+              break; // Exit loop if successful
+            }
+          } else {
+            console.log(`Endpoint ${endpoint} failed with status:`, response.status);
+          }
+        } catch (err) {
+          console.log(`Endpoint ${endpoint} error:`, err);
         }
-        
-        setMemberFixedDeposits(fixedDepositsData);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load fixed deposits:", response.status, errorData);
-        // Only create from payment history as a fallback if the API call fails
+      }
+
+      // If no fixed deposits found via API, create from payment history
+      if (!success) {
+        console.log('No fixed deposits found via API, checking payment history...');
         await createFixedDepositsFromPaymentHistory();
       }
+      
     } catch (err) {
-      console.error("Fixed deposit fetch error:", err);
-      // Only create from payment history as a fallback if the API call fails
+      console.error("All fixed deposit endpoints failed:", err);
       await createFixedDepositsFromPaymentHistory();
     } finally {
       setLoadingFixedDeposits(false);
     }
   };
 
- // FIXED: Handle fixed deposit collection WITHOUT page reload
-const handleCollectFixedDeposit = async (fixedDepositId) => {
-  const token = localStorage.getItem('accessToken');
-  
-  if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
-    return;
-  }
-
-  try {
-    console.log('=== COLLECTING FIXED DEPOSIT ===');
-    console.log('Fixed Deposit ID from click:', fixedDepositId);
-    console.log('Type of Fixed Deposit ID:', typeof fixedDepositId);
+  // FIXED: Handle fixed deposit collection WITHOUT page reload
+  const handleCollectFixedDeposit = async (fixedDepositId) => {
+    const token = localStorage.getItem('accessToken');
     
-    // Convert to string for consistent comparison
-    const fixedDepositIdStr = fixedDepositId.toString();
-    
-    const fixedDeposit = memberFixedDeposits.find(fd => {
-      const fdId = fd.id?.toString();
-      return fdId === fixedDepositIdStr;
-    });
-    
-    if (!fixedDeposit) {
-      console.error('Fixed deposit not found!');
-      console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
-      alert("Fixed deposit not found! Please refresh and try again.");
+    if (!confirm("Are you sure you want to mark this fixed deposit as collected? This action cannot be undone.")) {
       return;
     }
 
-    console.log('Found fixed deposit:', fixedDeposit);
-
-    // Check if it's temporary - now using the consistent prefix
-    const isTemporaryDeposit = fixedDepositIdStr.includes('temp-fd-') || 
-                             (fixedDeposit._source && fixedDeposit._source === 'payment_history');
-
-    if (isTemporaryDeposit) {
-      console.log('Handling temporary fixed deposit...');
+    try {
+      console.log('=== COLLECTING FIXED DEPOSIT ===');
+      console.log('Fixed Deposit ID from click:', fixedDepositId);
+      console.log('All memberFixedDeposits:', memberFixedDeposits);
       
-      // For temporary deposits, we need to create a record in the backend
-      // to persist the collection status
-      try {
-        const response = await fetch(`${API_BASE}admin/members/${memberId}/fixed-deposits/create-from-payment/`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            payment_id: fixedDepositIdStr.replace('temp-fd-', ''),
-            amount: fixedDeposit.amount,
-            collected_at: new Date().toISOString(),
-            is_active: false,
-            status: 'collected'
-          }),
-        });
-        
-        if (response.ok) {
-          console.log('Successfully created fixed deposit record in backend');
-          // Refresh fixed deposits from backend to get the new ID
-          await fetchMemberFixedDeposits(memberId, token);
-          alert("✅ Fixed deposit marked as collected!");
-        } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error("Failed to create fixed deposit record:", errorData);
-          alert(errorData.error || "Unable to mark fixed deposit as collected. Please try again.");
-        }
-      } catch (error) {
-        console.error("Error creating fixed deposit record:", error);
-        alert("Error marking fixed deposit as collected. Please try again.");
-      }
-      
-    } else {
-      console.log('Handling real fixed deposit via API...');
-      
-      const response = await fetch(`${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      // More robust ID matching
+      const fixedDeposit = memberFixedDeposits.find(fd => {
+        const fdId = fd.id?.toString();
+        const clickId = fixedDepositId?.toString();
+        console.log(`Comparing: ${fdId} with ${clickId}`);
+        return fdId === clickId;
       });
       
-      if (response.ok) {
-        console.log('Successfully marked real fixed deposit as collected');
+      if (!fixedDeposit) {
+        console.error('Fixed deposit not found!');
+        console.error('Available IDs:', memberFixedDeposits.map(fd => fd.id));
+        alert("Fixed deposit not found! Please refresh and try again.");
+        return;
+      }
+
+      console.log('Found fixed deposit:', fixedDeposit);
+
+      // Check if it's temporary
+      const isTemporaryDeposit = fixedDepositId.includes('temp-') || 
+                               (fixedDeposit._source && fixedDeposit._source === 'payment_history');
+
+      if (isTemporaryDeposit) {
+        console.log('Handling temporary fixed deposit...');
+        
+        // KEY FIX: Persist collection status in localStorage
+        const collectedDepositsKey = `collectedFixedDeposits_${memberId}`;
+        const collectedDeposits = JSON.parse(localStorage.getItem(collectedDepositsKey) || '[]');
+        
+        // Add this deposit to collected list if not already there
+        if (!collectedDeposits.includes(fixedDepositId)) {
+          collectedDeposits.push(fixedDepositId);
+          localStorage.setItem(collectedDepositsKey, JSON.stringify(collectedDeposits));
+          console.log('Added to collected deposits list:', collectedDeposits);
+        }
+        
+        // Create updated deposits array
+        const updatedDeposits = memberFixedDeposits.map(fd => {
+          const fdId = fd.id?.toString();
+          const clickId = fixedDepositId?.toString();
+          if (fdId === clickId) {
+            return { 
+              ...fd, 
+              is_active: false, 
+              collected_at: new Date().toISOString(),
+              status: 'collected'
+            };
+          }
+          return fd;
+        });
+        
+        console.log('Updated deposits:', updatedDeposits);
+        
+        // Update state IMMEDIATELY - no refresh
+        setMemberFixedDeposits(updatedDeposits);
+        
+        // Calculate new total from UPDATED data
+        const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
+        const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
+          sum + (parseFloat(deposit.amount) || 0), 0
+        );
+        
+        console.log('Active deposits after collection:', activeDeposits);
+        console.log('New fixed deposits total:', activeDepositsTotal);
+        
+        // Update dashboard data IMMEDIATELY - no refresh
+        setDashboardData(prev => {
+          if (!prev || !prev.financial_summary) return prev;
+          
+          return {
+            ...prev,
+            financial_summary: {
+              ...prev.financial_summary,
+              fixed_deposits: activeDepositsTotal,
+              // Also update any other related fields if needed
+              active_fixed_deposits: activeDepositsTotal
+            }
+          };
+        });
+        
         alert("✅ Fixed deposit marked as collected!");
         
-        // Refresh fixed deposits from backend to get the updated status
-        await fetchMemberFixedDeposits(memberId, token);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to mark fixed deposit as collected:", errorData);
-        alert(errorData.error || "Unable to collect fixed deposit. Please try again.");
+        console.log('Handling real fixed deposit via API...');
+        
+        const endpoints = [
+          `${API_BASE}admin/fixed-deposits/${fixedDepositId}/collect/`,
+          `${API_BASE}fixed-deposits/${fixedDepositId}/collect/`,
+          `${API_BASE}admin/fixed-deposits/${fixedDepositId}/mark-collected/`,
+        ];
+
+        let success = false;
+
+        for (const endpoint of endpoints) {
+          try {
+            console.log('Trying endpoint:', endpoint);
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            });
+            
+            if (response.ok) {
+              console.log('Success with endpoint:', endpoint);
+              success = true;
+              break;
+            }
+          } catch (err) {
+            console.log(`Endpoint ${endpoint} error:`, err);
+          }
+        }
+
+        if (success) {
+          alert("✅ Fixed deposit marked as collected!");
+          
+          // Update local state immediately
+          const updatedDeposits = memberFixedDeposits.map(fd => {
+            const fdId = fd.id?.toString();
+            const clickId = fixedDepositId?.toString();
+            if (fdId === clickId) {
+              return { 
+                ...fd, 
+                is_active: false, 
+                collected_at: new Date().toISOString(),
+                status: 'collected'
+              };
+            }
+            return fd;
+          });
+          
+          setMemberFixedDeposits(updatedDeposits);
+          
+          // Calculate new total from UPDATED data
+          const activeDeposits = updatedDeposits.filter(fd => fd.is_active !== false);
+          const activeDepositsTotal = activeDeposits.reduce((sum, deposit) => 
+            sum + (parseFloat(deposit.amount) || 0), 0
+          );
+          
+          // Update dashboard data immediately
+          setDashboardData(prev => {
+            if (!prev || !prev.financial_summary) return prev;
+            
+            return {
+              ...prev,
+              financial_summary: {
+                ...prev.financial_summary,
+                fixed_deposits: activeDepositsTotal,
+                active_fixed_deposits: activeDepositsTotal
+              }
+            };
+          });
+          
+        } else {
+          alert("Unable to collect fixed deposit via API. Please try again.");
+        }
       }
+    } catch (error) {
+      console.error("Fixed deposit collection error:", error);
+      alert("Error collecting fixed deposit. Please try again.");
     }
-    
-    // Refresh dashboard data to update totals
-    await fetchMemberDashboardData(memberId, token);
-    
-  } catch (error) {
-    console.error("Fixed deposit collection error:", error);
-    alert("Error collecting fixed deposit. Please try again.");
-  }
-};
+  };
+
+// Also update your createFixedDepositsFromPaymentHistory function
+const createFixedDepositsFromPaymentHistory = async () => {
+    try {
+      console.log('Creating fixed deposits from payment history...');
+      console.log('Current paymentHistory state:', paymentHistory);
+      
+      const fixedDepositPayments = paymentHistory.filter(payment => 
+        payment.payment_type === 'fixed_deposit' && 
+        (payment.status === 'confirmed' || payment.is_successful)
+      );
+
+      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
+
+      // KEY FIX: Get collected deposits from localStorage
+      const collectedDepositsKey = `collectedFixedDeposits_${memberId}`;
+      const collectedDeposits = JSON.parse(localStorage.getItem(collectedDepositsKey) || '[]');
+      console.log('Previously collected deposits:', collectedDeposits);
+
+      if (fixedDepositPayments.length > 0) {
+        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => {
+          const tempId = `temp-fd-${payment.id || index}`;
+          const isCollected = collectedDeposits.includes(tempId);
+          
+          return {
+            id: tempId,
+            amount: payment.amount,
+            created_at: payment.date || payment.created_at,
+            is_active: !isCollected, // Set to false if collected
+            duration_months: 12,
+            interest_rate: 0,
+            member: memberId,
+            payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+            _source: 'payment_history',
+            // Add collection info if collected
+            ...(isCollected && {
+              collected_at: new Date().toISOString(),
+              status: 'collected'
+            })
+          };
+        });
+
+        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
+        setMemberFixedDeposits(fixedDepositsFromPayments);
+      } else {
+        console.log('No fixed deposit payments found in payment history');
+        setMemberFixedDeposits([]);
+      }
+    } catch (err) {
+      console.error('Error creating fixed deposits from payment history:', err);
+      setMemberFixedDeposits([]);
+    }
+  };
 
   // FIXED: Calculate active fixed deposits total
   const getActiveFixedDepositsTotal = () => {
     // Use memberFixedDeposits state as primary source
     if (memberFixedDeposits.length > 0) {
-      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active === true);
-      const total = activeDeposits.reduce((sum, deposit) => sum + (parseFloat(getPaymentAmount(deposit)) || 0), 0);
+      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
+      const total = activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
       console.log('Active deposits from memberFixedDeposits:', activeDeposits, 'Total:', total);
       return total;
     }
@@ -385,49 +443,14 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
     // Use memberFixedDeposits state as primary source
     if (memberFixedDeposits.length > 0) {
       const collectedDeposits = memberFixedDeposits.filter(fd => fd.is_active === false);
-      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(getPaymentAmount(deposit)) || 0), 0);
+      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
     }
     
     return 0;
   };
 
-  // Create fixed deposits from payment history as fallback
-  const createFixedDepositsFromPaymentHistory = async () => {
-    try {
-      console.log('Creating fixed deposits from payment history...');
-      console.log('Current paymentHistory state:', paymentHistory);
-      
-      const fixedDepositPayments = paymentHistory.filter(payment => 
-        payment.payment_type === 'fixed_deposit' && 
-        (payment.status === 'confirmed' || payment.is_successful)
-      );
-
-      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
-
-      if (fixedDepositPayments.length > 0) {
-        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
-          id: `temp-fd-${payment.id || index}`,
-          amount: getPaymentAmount(payment),
-          created_at: payment.date || payment.created_at,
-          is_active: true,
-          duration_months: 12,
-          interest_rate: 0,
-          member: memberId,
-          payment_reference: getPaymentReference(payment),
-          _source: 'payment_history'
-        }));
-
-        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
-        setMemberFixedDeposits(fixedDepositsFromPayments);
-      } else {
-        console.log('No fixed deposit payments found in payment history');
-        setMemberFixedDeposits([]);
-      }
-    } catch (err) {
-      console.error('Error creating fixed deposits from payment history:', err);
-      setMemberFixedDeposits([]);
-    }
-  };
+  // Duplicate fallback removed — using the updated createFixedDepositsFromPaymentHistory implementation above
+  // (The original fallback implementation was removed to avoid redeclaration of the function.)
 
   // Refresh fixed deposits manually
   const refreshFixedDeposits = async () => {
@@ -440,7 +463,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
   // Update group account endpoint - with better error handling
   const fetchGroupAccount = async (token) => {
     try {
-      const response = await fetch(`${API_BASE}payments/group-account/`, {
+      const response = await fetch("http://127.0.0.1:8000/api/payments/group-account/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
@@ -450,8 +473,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
         const data = await response.json();
         setGroupAccount(data);
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to load group account:", response.status, errorData);
+        console.error("Failed to load group account:", response.status);
       }
     } catch (err) {
       console.error("Group account fetch error:", err);
@@ -508,8 +530,8 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
   const handleAdminManualPayment = async () => {
     const token = localStorage.getItem('accessToken');
 
-    if (!amount || parseFloat(amount) < MINIMUM_CONTRIBUTION) {
-      alert(`Minimum contribution is ₦${MINIMUM_CONTRIBUTION}.`);
+    if (!amount || parseFloat(amount) < 1100) {
+      alert("Minimum contribution is ₦1100.");
       return;
     }
 
@@ -582,7 +604,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
         fetchPaymentHistory(memberId, token);
         fetchMemberDashboardData(memberId, token);
       } else {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json();
         alert(errorData.error || `Failed to ${action} payment`);
       }
     } catch (error) {
@@ -634,7 +656,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
   const getTotalContributions = () => {
     return paymentHistory
       .filter(payment => payment.status === "confirmed" || payment.is_successful)
-      .reduce((sum, payment) => sum + (getPaymentAmount(payment) || 0), 0);
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
   };
 
   // Calculate savings for current week
@@ -657,7 +679,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
              paymentDate <= endOfWeek && 
              (payment.status === "confirmed" || payment.is_successful) &&
              payment.payment_type === 'savings';
-    }).reduce((sum, payment) => sum + (parseFloat(getPaymentAmount(payment)) || 0), 0);
+    }).reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
   };
 
   // Calculate savings for current month
@@ -676,16 +698,16 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
              paymentDate <= endOfMonth && 
              (payment.status === "confirmed" || payment.is_successful) &&
              payment.payment_type === 'savings';
-    }).reduce((sum, payment) => sum + (parseFloat(getPaymentAmount(payment)) || 0), 0);
+    }).reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
   };
 
   const getContributionsWithoutRegistration = () => {
     return paymentHistory
       .filter(payment => 
         (payment.status === "confirmed" || payment.is_successful) &&
-        getPaymentAmount(payment) !== 20300
+        payment.amount !== 20300
       )
-      .reduce((sum, payment) => sum + (getPaymentAmount(payment) || 0), 0);
+      .reduce((sum, payment) => sum + (payment.amount || 0), 0);
   };
 
   // Calculate loan details for display
@@ -1231,17 +1253,17 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                       {/* Active Fixed Deposits */}
                       <div className="mb-6">
                         <h4 className="text-md font-medium text-gray-900 mb-3">
-                          Active Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active === true).length})
+                          Active Fixed Deposits ({displayFixedDeposits.filter(fd => fd.is_active !== false).length})
                         </h4>
                         
-                        {displayFixedDeposits.filter(fd => fd.is_active === true).length > 0 ? (
+                        {displayFixedDeposits.filter(fd => fd.is_active !== false).length > 0 ? (
                           <div className="space-y-4">
-                            {displayFixedDeposits.filter(fd => fd.is_active === true).map((fixedDeposit) => (
+                            {displayFixedDeposits.filter(fd => fd.is_active !== false).map((fixedDeposit) => (
                               <div key={fixedDeposit.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                                 <div className="flex justify-between items-start mb-2">
                                   <div>
                                     <h5 className="font-medium text-gray-900">
-                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-fd-') 
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
                                         ? 'Fixed Deposit (From Payments)' 
                                         : `Fixed Deposit #${fixedDeposit.id}`}
                                     </h5>
@@ -1257,7 +1279,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                                   </div>
                                   <div className="text-right">
                                     <p className="text-lg font-bold text-gray-900">
-                                      ₦{(getPaymentAmount(fixedDeposit) || 0).toLocaleString()}
+                                      ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
                                     </p>
                                     <p className="text-sm text-green-600 font-medium">Active</p>
                                   </div>
@@ -1267,9 +1289,16 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm text-gray-600 mt-3">
                                   <div>
                                     <span className="font-medium">Amount:</span> 
-                                    <br />₦{(getPaymentAmount(fixedDeposit) || 0).toLocaleString()}
+                                    <br />₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
                                   </div>
-                              
+                                  <div>
+                                    <span className="font-medium">Duration:</span> 
+                                    <br />{fixedDeposit.duration_months || '12'} months
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">Interest Rate:</span> 
+                                    <br />{fixedDeposit.interest_rate || '0'}%
+                                  </div>
                                 </div>
 
                                 {/* Collection Button - Show for ALL fixed deposits now */}
@@ -1332,12 +1361,12 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                                 <div className="flex justify-between items-center">
                                   <div>
                                     <p className="font-medium text-gray-900">
-                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-fd-') 
+                                      {typeof fixedDeposit.id === 'string' && fixedDeposit.id.includes('temp-') 
                                         ? 'Fixed Deposit (From Payments)' 
                                         : `Fixed Deposit #${fixedDeposit.id}`}
                                     </p>
                                     <p className="text-sm text-gray-600">
-                                      Amount: ₦{(getPaymentAmount(fixedDeposit) || 0).toLocaleString()}
+                                      Amount: ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
                                     </p>
                                     <p className="text-sm text-gray-600">
                                       Collected: {fixedDeposit.collected_at ? new Date(fixedDeposit.collected_at).toLocaleDateString() : 'N/A'}
@@ -1345,7 +1374,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                                   </div>
                                   <div className="text-right">
                                     <p className="text-sm font-bold text-gray-900">
-                                      ₦{(getPaymentAmount(fixedDeposit) || 0).toLocaleString()}
+                                      ₦{(fixedDeposit.amount || fixedDeposit.deposit_amount || 0).toLocaleString()}
                                     </p>
                                     <p className="text-xs text-gray-500">Collected</p>
                                   </div>
@@ -1424,7 +1453,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              ₦{getPaymentAmount(payment)?.toLocaleString()}
+                              ₦{payment.amount?.toLocaleString()}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <span
@@ -1442,7 +1471,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
-                              {getPaymentReference(payment)}
+                              {payment.reference_number || payment.tx_ref || payment.card_number_reference || 'N/A'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {payment.bank_name || 'N/A'}
@@ -1583,16 +1612,16 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                   </div>
                   <input
                     type="number"
-                    placeholder={`Enter amount (min: ${MINIMUM_CONTRIBUTION.toLocaleString()})`}
-                    min={MINIMUM_CONTRIBUTION}
+                    placeholder="Enter amount (min: 1,100)"
+                    min="1100"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                     required
                   />
                 </div>
-                {amount && parseFloat(amount) < MINIMUM_CONTRIBUTION && (
-                  <p className="text-red-500 text-xs mt-2">Minimum amount is ₦{MINIMUM_CONTRIBUTION.toLocaleString()}</p>
+                {amount && parseFloat(amount) < 1100 && (
+                  <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
                 )}
               </div>
 
@@ -1675,7 +1704,7 @@ const handleCollectFixedDeposit = async (fixedDepositId) => {
                 </button>
                 <button
                   onClick={handleAdminManualPayment}
-                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < MINIMUM_CONTRIBUTION}
+                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
                 >
                   {loadingPayment ? (
