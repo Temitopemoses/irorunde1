@@ -42,7 +42,7 @@ const MemberDashboard = () => {
   const refreshAllData = async () => {
     setLoading(true);
     const token = localStorage.getItem('accessToken');
-    const userData = JSON.parse(localStorage.getItem('userData'));
+   
     
     try {
       // Fetch all data in parallel
@@ -171,28 +171,28 @@ const MemberDashboard = () => {
             if (fixedDepositsData.length > 0) {
               console.log('Found fixed deposits via API:', fixedDepositsData);
               
-              // Process the data to ensure consistent format
-              const processedDeposits = fixedDepositsData.map(deposit => ({
-                id: deposit.id || deposit._id,
-                amount: deposit.amount || deposit.deposit_amount,
-                created_at: deposit.created_at || deposit.date_created,
-                is_active: deposit.is_active !== undefined ? deposit.is_active : 
-                          deposit.status === 'active' ? true : 
-                          deposit.status === 'collected' ? false : true,
-                duration_months: deposit.duration_months || 12,
-                interest_rate: deposit.interest_rate || 0,
-                member: deposit.member || userData?.id,
-                payment_reference: deposit.payment_reference || deposit.reference,
-                collected_at: deposit.collected_at,
-                status: deposit.status || 'active'
-              }));
+              // // Process the data to ensure consistent format
+              // const processedDeposits = fixedDepositsData.map(deposit => ({
+              //   id: deposit.id || deposit._id,
+              //   amount: deposit.amount || deposit.deposit_amount,
+              //   created_at: deposit.created_at || deposit.date_created,
+              //   is_active: deposit.is_active !== undefined ? deposit.is_active : 
+              //             deposit.status === 'active' ? true : 
+              //             deposit.status === 'collected' ? false : true,
+              //   duration_months: deposit.duration_months || 12,
+              //   interest_rate: deposit.interest_rate || 0,
+              //   member: deposit.member || userData?.id,
+              //   payment_reference: deposit.payment_reference || deposit.reference,
+              //   collected_at: deposit.collected_at,
+              //   status: deposit.status || 'active'
+              // }));
               
-              setMemberFixedDeposits(processedDeposits);
+              setMemberFixedDeposits(fixedDepositsData);
               success = true;
               break;
             }
-          } else {
-            console.log(`Endpoint ${endpoint} returned status:`, response.status);
+          // } else {
+          //   console.log(`Endpoint ${endpoint} returned status:`, response.status);
           }
         } catch (err) {
           console.log(`Endpoint ${endpoint} error:`, err);
@@ -202,12 +202,12 @@ const MemberDashboard = () => {
       // If no fixed deposits found via API, create from payment history
       if (!success) {
         console.log('No fixed deposits found via API, checking payment history...');
-        createFixedDepositsFromPaymentHistory();
+        setMemberFixedDeposits
       }
       
     } catch (err) {
       console.error("All fixed deposit API endpoints failed:", err);
-      createFixedDepositsFromPaymentHistory();
+      setMemberFixedDeposits([]);
     } finally {
       setLoadingFixedDeposits(false);
     }
@@ -348,7 +348,7 @@ const MemberDashboard = () => {
       const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
       return activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
     }
-    return dashboardData?.financial_summary?.fixed_deposits || 0;
+    return 0;
   };
 
   const getCollectedFixedDepositsTotal = () => {
