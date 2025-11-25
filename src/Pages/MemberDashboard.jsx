@@ -170,39 +170,19 @@ const MemberDashboard = () => {
             
             if (fixedDepositsData.length > 0) {
               console.log('Found fixed deposits via API:', fixedDepositsData);
-              
-              // // Process the data to ensure consistent format
-              // const processedDeposits = fixedDepositsData.map(deposit => ({
-              //   id: deposit.id || deposit._id,
-              //   amount: deposit.amount || deposit.deposit_amount,
-              //   created_at: deposit.created_at || deposit.date_created,
-              //   is_active: deposit.is_active !== undefined ? deposit.is_active : 
-              //             deposit.status === 'active' ? true : 
-              //             deposit.status === 'collected' ? false : true,
-              //   duration_months: deposit.duration_months || 12,
-              //   interest_rate: deposit.interest_rate || 0,
-              //   member: deposit.member || userData?.id,
-              //   payment_reference: deposit.payment_reference || deposit.reference,
-              //   collected_at: deposit.collected_at,
-              //   status: deposit.status || 'active'
-              // }));
-              
               setMemberFixedDeposits(fixedDepositsData);
               success = true;
               break;
             }
-          // } else {
-          //   console.log(`Endpoint ${endpoint} returned status:`, response.status);
           }
         } catch (err) {
           console.log(`Endpoint ${endpoint} error:`, err);
         }
       }
 
-      // If no fixed deposits found via API, create from payment history
       if (!success) {
         console.log('No fixed deposits found via API, checking payment history...');
-        setMemberFixedDeposits
+        setMemberFixedDeposits([]);
       }
       
     } catch (err) {
@@ -210,43 +190,6 @@ const MemberDashboard = () => {
       setMemberFixedDeposits([]);
     } finally {
       setLoadingFixedDeposits(false);
-    }
-  };
-
-  // Create fixed deposits from payment history as fallback
-  const createFixedDepositsFromPaymentHistory = () => {
-    try {
-      console.log('Creating fixed deposits from payment history...');
-      
-      const fixedDepositPayments = paymentHistory.filter(payment => 
-        payment.payment_type === 'fixed_deposit' && 
-        (payment.status === 'confirmed' || payment.is_successful)
-      );
-
-      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
-
-      if (fixedDepositPayments.length > 0) {
-        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
-          id: `temp-fd-${payment.id || index}`,
-          amount: payment.amount,
-          created_at: payment.date || payment.created_at,
-          is_active: true,
-          duration_months: 12,
-          interest_rate: 0,
-          member: userData?.id,
-          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
-          _source: 'payment_history'
-        }));
-
-        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
-        setMemberFixedDeposits(fixedDepositsFromPayments);
-      } else {
-        console.log('No fixed deposit payments found in payment history');
-        setMemberFixedDeposits([]);
-      }
-    } catch (err) {
-      console.error('Error creating fixed deposits from payment history:', err);
-      setMemberFixedDeposits([]);
     }
   };
 
@@ -367,10 +310,10 @@ const MemberDashboard = () => {
           <div className={`flex-shrink-0 bg-${color}-100 rounded-md p-3`}>
             {icon}
           </div>
-          <div className="ml-5 w-0 flex-1">
+          <div className="ml-4 flex-1 min-w-0">
             <dl>
               <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
-              <dd className="text-lg font-medium text-gray-900">
+              <dd className="text-lg font-medium text-gray-900 truncate">
                 ₦{amount?.toLocaleString() || '0'}
               </dd>
               {/* Show paid amount for loans */}
@@ -473,83 +416,85 @@ const MemberDashboard = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header with Refresh Button */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 space-y-3 sm:space-y-0">
+            <div className="flex items-center space-x-3">
               {/* Passport Photo */}
               {dashboardData.member_info.passport_photo ? (
                 <div className="flex-shrink-0">
                   <img
                     src={dashboardData.member_info.passport_photo}
                     alt="Passport Photo"
-                    className="h-12 w-12 rounded-full object-cover border-2 border-amber-600"
+                    className="h-10 w-10 sm:h-12 sm:w-12 rounded-full object-cover border-2 border-amber-600"
                   />
                 </div>
               ) : (
                 <div className="flex-shrink-0">
-                  <div className="h-12 w-12 rounded-full bg-gray-300 flex items-center justify-center border-2 border-amber-600">
-                    <svg className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-300 flex items-center justify-center border-2 border-amber-600">
+                    <svg className="h-5 w-5 sm:h-6 sm:w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
                 </div>
               )}
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Irorunde Member Dashboard</h1>
-                <p className="text-gray-600">Welcome to your member portal</p>
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">Irorunde Member Dashboard</h1>
+                <p className="text-gray-600 text-sm hidden sm:block">Welcome to your member portal</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
               {/* Refresh Button */}
               <button
                 onClick={refreshAllData}
                 disabled={loading}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2 disabled:opacity-50"
+                className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center space-x-2 disabled:opacity-50 w-full sm:w-auto justify-center"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 <span>{loading ? "Refreshing..." : "Refresh"}</span>
               </button>
-              <span className="text-gray-700">
-                {dashboardData.member_info.name}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm"
-              >
-                Logout
-              </button>
+              <div className="flex items-center space-x-3 w-full sm:w-auto justify-between">
+                <span className="text-gray-700 text-sm truncate max-w-[120px] sm:max-w-none">
+                  {dashboardData.member_info.name}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 text-sm sm:ml-2"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
+      <main className="max-w-7xl mx-auto py-4 sm:py-6 px-3 sm:px-4 lg:px-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Welcome Card */}
-          <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="px-4 py-5 sm:p-6">
-              <div className="flex items-center space-x-6">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
                 {dashboardData.member_info.passport_photo ? (
                   <div className="flex-shrink-0">
                     <img
                       src={dashboardData.member_info.passport_photo}
                       alt="Passport Photo"
-                      className="h-24 w-24 rounded-full object-cover border-4 border-amber-600 shadow-lg"
+                      className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover border-4 border-amber-600 shadow-lg"
                     />
                   </div>
                 ) : (
                   <div className="flex-shrink-0">
-                    <div className="h-24 w-24 rounded-full bg-gray-300 flex items-center justify-center border-4 border-amber-600 shadow-lg">
-                      <svg className="h-12 w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-gray-300 flex items-center justify-center border-4 border-amber-600 shadow-lg">
+                      <svg className="h-10 w-10 sm:h-12 sm:w-12 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                   </div>
                 )}
-                <div>
+                <div className="text-center sm:text-left">
                   <h3 className="text-lg leading-6 font-medium text-gray-900">
                     Welcome back, {dashboardData.member_info.name}!
                   </h3>
@@ -568,39 +513,41 @@ const MemberDashboard = () => {
 
           {/* Group Account Information */}
           {groupAccount && (
-            <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="bg-gradient-to-r from-green-50 to-green-100 border border-green-200 rounded-lg p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+                <div className="flex-1">
                   <h3 className="text-lg font-semibold text-green-800 mb-2">Group Bank Account Details</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium text-green-700 w-32">Bank Name:</span>
-                      <span className="text-green-900">{groupAccount.bank_name || "Not set"}</span>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center">
+                      <span className="text-sm font-medium text-green-700 sm:w-32">Bank Name:</span>
+                      <span className="text-green-900 sm:ml-2">{groupAccount.bank_name || "Not set"}</span>
                     </div>
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium text-green-700 w-32">Account Number:</span>
-                      <span className="text-green-900 font-mono">{groupAccount.account_number || "Not set"}</span>
-                      {groupAccount.account_number && (
-                        <button
-                          onClick={() => copyToClipboard(groupAccount.account_number)}
-                          className="ml-2 text-green-600 hover:text-green-800"
-                          title="Copy to clipboard"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                      )}
+                    <div className="flex flex-col sm:flex-row sm:items-center">
+                      <span className="text-sm font-medium text-green-700 sm:w-32">Account Number:</span>
+                      <div className="flex items-center">
+                        <span className="text-green-900 font-mono sm:ml-2">{groupAccount.account_number || "Not set"}</span>
+                        {groupAccount.account_number && (
+                          <button
+                            onClick={() => copyToClipboard(groupAccount.account_number)}
+                            className="ml-2 text-green-600 hover:text-green-800"
+                            title="Copy to clipboard"
+                          >
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <span className="text-sm font-medium text-green-700 w-32">Account Name:</span>
-                      <span className="text-green-900">{groupAccount.account_name || "Not set"}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center">
+                      <span className="text-sm font-medium text-green-700 sm:w-32">Account Name:</span>
+                      <span className="text-green-900 sm:ml-2">{groupAccount.account_name || "Not set"}</span>
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="bg-green-600 text-white px-4 py-2 rounded-lg">
-                    <p className="text-sm">Use this account for all payments</p>
+                <div className="w-full sm:w-auto text-center sm:text-right mt-2 sm:mt-0">
+                  <div className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm inline-block">
+                    <p>Use this account for all payments</p>
                   </div>
                 </div>
               </div>
@@ -608,7 +555,7 @@ const MemberDashboard = () => {
           )}
 
           {/* Member Information Cards */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {/* Card Number */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
@@ -618,10 +565,10 @@ const MemberDashboard = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                     </svg>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
+                  <div className="ml-4 flex-1 min-w-0">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Card number</dt>
-                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.card_number}</dd>
+                      <dd className="text-lg font-medium text-gray-900 truncate">{dashboardData.member_info.card_number}</dd>
                     </dl>
                   </div>
                 </div>
@@ -637,10 +584,10 @@ const MemberDashboard = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
+                  <div className="ml-4 flex-1 min-w-0">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Group</dt>
-                      <dd className="text-lg font-medium text-gray-900">{dashboardData.member_info.group}</dd>
+                      <dd className="text-lg font-medium text-gray-900 truncate">{dashboardData.member_info.group}</dd>
                     </dl>
                   </div>
                 </div>
@@ -656,10 +603,10 @@ const MemberDashboard = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
+                  <div className="ml-4 flex-1 min-w-0">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Status</dt>
-                      <dd className="text-lg font-medium text-gray-900 capitalize">{dashboardData.member_info.status}</dd>
+                      <dd className="text-lg font-medium text-gray-900 capitalize truncate">{dashboardData.member_info.status}</dd>
                     </dl>
                   </div>
                 </div>
@@ -675,10 +622,10 @@ const MemberDashboard = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
+                  <div className="ml-4 flex-1 min-w-0">
                     <dl>
                       <dt className="text-sm font-medium text-gray-500 truncate">Passport Photo</dt>
-                      <dd className="text-lg font-medium text-gray-900">
+                      <dd className="text-lg font-medium text-gray-900 truncate">
                         {dashboardData.member_info.has_photo ? 'Uploaded' : 'Not Uploaded'}
                       </dd>
                     </dl>
@@ -689,9 +636,9 @@ const MemberDashboard = () => {
           </div>
 
           {/* Enhanced Financial Summary */}
-          <div className="mt-8">
+          <div className="mt-6 sm:mt-8">
             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Financial Summary</h3>
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <FinancialCard
                 title="Total Savings"
                 amount={dashboardData.financial_summary?.total_savings}
@@ -729,13 +676,13 @@ const MemberDashboard = () => {
 
             {/* Fixed Deposits Summary */}
             {memberFixedDeposits.length > 0 && (
-              <div className="mt-6 bg-white shadow rounded-lg p-6">
-                <div className="flex justify-between items-center mb-4">
+              <div className="mt-6 bg-white shadow rounded-lg p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
                   <h4 className="text-md font-medium text-gray-900">Fixed Deposits Summary</h4>
                   <button
                     onClick={() => fetchMemberFixedDeposits(localStorage.getItem('accessToken'))}
                     disabled={loadingFixedDeposits}
-                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1"
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1 w-full sm:w-auto justify-center"
                   >
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -743,18 +690,18 @@ const MemberDashboard = () => {
                     <span>{loadingFixedDeposits ? "Refreshing..." : "Refresh"}</span>
                   </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                  <div className="p-3 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">{memberFixedDeposits.filter(fd => fd.is_active !== false).length}</div>
                     <div className="text-sm text-gray-600">Active Deposits</div>
                     <div className="text-xs text-green-600">₦{getActiveFixedDepositsTotal().toLocaleString()}</div>
                   </div>
-                  <div className="text-center">
+                  <div className="p-3 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">{memberFixedDeposits.filter(fd => fd.is_active === false).length}</div>
                     <div className="text-sm text-gray-600">Collected Deposits</div>
                     <div className="text-xs text-green-600">₦{getCollectedFixedDepositsTotal().toLocaleString()}</div>
                   </div>
-                  <div className="text-center">
+                  <div className="p-3 bg-amber-50 rounded-lg">
                     <div className="text-2xl font-bold text-amber-600">{memberFixedDeposits.length}</div>
                     <div className="text-sm text-gray-600">Total Deposits</div>
                     <div className="text-xs text-green-600">₦{(getActiveFixedDepositsTotal() + getCollectedFixedDepositsTotal()).toLocaleString()}</div>
@@ -766,14 +713,14 @@ const MemberDashboard = () => {
 
           {/* Payment History */}
           {paymentHistory.length > 0 ? (
-            <div className="mt-10">
-              <div className="flex justify-between items-center mb-4">
+            <div className="mt-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   Your Payment History ({paymentHistory.length} transactions)
                 </h3>
                 <button
                   onClick={() => fetchPaymentHistory(localStorage.getItem('accessToken'))}
-                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm"
+                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm w-full sm:w-auto"
                 >
                   Refresh
                 </button>
@@ -782,21 +729,21 @@ const MemberDashboard = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount (₦)</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bank Name</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Reference</th>
+                      <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Bank Name</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paymentHistory.map((payment) => (
                       <tr key={payment.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
                           {new Date(payment.date || payment.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm capitalize">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm capitalize">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                             payment.payment_type === 'savings' ? 'bg-green-100 text-green-800' :
                             payment.payment_type === 'fixed_deposit' ? 'bg-blue-100 text-blue-800' :
@@ -807,10 +754,10 @@ const MemberDashboard = () => {
                             {payment.payment_type?.replace('_', ' ') || 'contribution'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           ₦{payment.amount?.toLocaleString()}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm">
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             payment.status === "confirmed" || payment.is_successful
                               ? "bg-green-100 text-green-800"
@@ -823,10 +770,10 @@ const MemberDashboard = () => {
                             {payment.status || (payment.is_successful ? "confirmed" : "pending")}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-xs hidden sm:table-cell">
                           {payment.reference_number || payment.tx_ref || payment.card_number_reference || 'N/A'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
                           {payment.bank_name || 'N/A'}
                         </td>
                       </tr>
@@ -836,8 +783,8 @@ const MemberDashboard = () => {
               </div>
             </div>
           ) : (
-            <div className="mt-10 text-center">
-              <div className="bg-white shadow rounded-lg p-8">
+            <div className="mt-8 text-center">
+              <div className="bg-white shadow rounded-lg p-6 sm:p-8">
                 <svg className="h-12 w-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                 </svg>
@@ -845,7 +792,7 @@ const MemberDashboard = () => {
                 <p className="text-gray-500 mb-4">You haven't made any payments yet.</p>
                 <button
                   onClick={() => setShowPaymentModal(true)}
-                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
+                  className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 w-full sm:w-auto"
                 >
                   Make Your First Payment
                 </button>
@@ -859,7 +806,7 @@ const MemberDashboard = () => {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <button
                 onClick={() => setShowPaymentModal(true)}
-                className="bg-white overflow-hidden shadow rounded-lg p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
+                className="bg-white overflow-hidden shadow rounded-lg p-4 sm:p-6 text-left hover:shadow-md transition-shadow border border-gray-200"
               >
                 <div className="flex items-center">
                   <div className="flex-shrink-0 bg-amber-100 rounded-md p-2">
@@ -880,13 +827,13 @@ const MemberDashboard = () => {
 
       {/* Modern Payment Modal */}
       {showPaymentModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Make a Payment</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-white">Make a Payment</h2>
                   <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
                 </div>
                 <button
@@ -901,10 +848,10 @@ const MemberDashboard = () => {
             </div>
 
             {/* Body */}
-            <div className="p-6 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               {/* Group Account Card */}
               {groupAccount && (
-                <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
                   <div className="flex items-start space-x-3">
                     <div className="bg-emerald-100 rounded-lg p-2">
                       <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -933,11 +880,11 @@ const MemberDashboard = () => {
               )}
 
               {/* Payment Category Selection */}
-              <div className="mb-6">
+              <div className="mb-4 sm:mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   What are you paying for?
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3">
                   {[
                     { value: "savings", label: "Savings", icon: "💰", color: "green" },
                     { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
@@ -947,13 +894,13 @@ const MemberDashboard = () => {
                     <button
                       key={option.value}
                       onClick={() => setPaymentCategory(option.value)}
-                      className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                      className={`p-2 sm:p-3 rounded-xl border-2 transition-all duration-200 ${
                         paymentCategory === option.value
                           ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
                           : "border-gray-200 bg-white hover:border-gray-300"
                       }`}
                     >
-                      <div className="text-2xl mb-1">{option.icon}</div>
+                      <div className="text-xl sm:text-2xl mb-1">{option.icon}</div>
                       <div className="text-xs font-medium text-gray-700">{option.label}</div>
                     </button>
                   ))}
@@ -961,7 +908,7 @@ const MemberDashboard = () => {
               </div>
 
               {/* Amount Input */}
-              <div className="mb-6">
+              <div className="mb-4 sm:mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Amount (₦)
                 </label>
@@ -985,7 +932,7 @@ const MemberDashboard = () => {
               </div>
 
               {/* Bank Details Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4 mb-4 sm:mb-6">
                 {/* Bank Name */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1030,7 +977,7 @@ const MemberDashboard = () => {
               </div>
 
               {/* Transaction Reference */}
-              <div className="mb-6">
+              <div className="mb-4 sm:mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Transaction Reference
                 </label>
@@ -1053,7 +1000,7 @@ const MemberDashboard = () => {
               </div>
 
               {/* Instructions */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
                 <div className="flex items-start space-x-3">
                   <div className="bg-blue-100 rounded-lg p-2">
                     <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1074,8 +1021,8 @@ const MemberDashboard = () => {
             </div>
 
             {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-              <div className="flex space-x-3">
+            <div className="bg-gray-50 px-4 sm:px-6 py-4 border-t border-gray-200">
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                 <button
                   onClick={handleCloseModal}
                   className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
