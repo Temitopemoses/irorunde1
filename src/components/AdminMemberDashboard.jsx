@@ -479,67 +479,43 @@ const MemberDashboardView = () => {
 
   // FIXED: Helper method to notify all components about fixed deposit updates
   const notifyFixedDepositUpdate = (action, depositId, amount) => {
-  console.log('=== NOTIFYING FIXED DEPOSIT UPDATE ===');
-  console.log('Action:', action);
-  console.log('Member ID:', memberId);
-  console.log('Deposit ID:', depositId);
-  
-  // Method 1: Direct localStorage update (most reliable)
-  const currentDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
-  if (currentDeposits) {
-    const deposits = JSON.parse(currentDeposits);
-    const updatedDeposits = deposits.map(fd => 
-      fd.id === depositId || fd.payment_reference === depositId
-        ? { 
-            ...fd, 
-            is_active: false, 
-            status: 'collected',
-            collected_at: new Date().toISOString()
-          }
-        : fd
-    );
+    // Method 1: localStorage event
+    localStorage.setItem('fixed_deposit_updated', JSON.stringify({
+      memberId: memberId,
+      timestamp: Date.now(),
+      action: action,
+      depositId: depositId,
+      amount: amount
+    }));
     
-    console.log('Updating localStorage with:', updatedDeposits);
-    localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(updatedDeposits));
-  }
-  
-  // Method 2: Admin notification (backup)
-  localStorage.setItem('fixed_deposit_updated', JSON.stringify({
-    memberId: memberId,
-    timestamp: Date.now(),
-    action: action,
-    depositId: depositId,
-    amount: amount
-  }));
-  
-  // Method 3: Custom event
-  window.dispatchEvent(new CustomEvent('fixedDepositUpdate', {
-    detail: {
-      memberId: memberId,
-      action: action,
-      depositId: depositId,
-      amount: amount,
-      timestamp: Date.now()
+    // Method 2: Custom event
+    window.dispatchEvent(new CustomEvent('fixedDepositUpdate', {
+      detail: {
+        memberId: memberId,
+        action: action,
+        depositId: depositId,
+        amount: amount,
+        timestamp: Date.now()
+      }
+    }));
+    
+    // Method 3: BroadcastChannel for cross-tab communication
+    try {
+      const channel = new BroadcastChannel('fixed_deposit_updates');
+      channel.postMessage({
+        memberId: memberId,
+        action: action,
+        depositId: depositId,
+        amount: amount,
+        timestamp: Date.now()
+      });
+      channel.close();
+    } catch (e) {
+      console.log('BroadcastChannel not supported:', e);
     }
-  }));
-  
-  // Method 4: BroadcastChannel
-  try {
-    const channel = new BroadcastChannel('fixed_deposit_updates');
-    channel.postMessage({
-      memberId: memberId,
-      action: action,
-      depositId: depositId,
-      amount: amount,
-      timestamp: Date.now()
-    });
-    channel.close();
-  } catch (e) {
-    console.log('BroadcastChannel not supported:', e);
-  }
-  
-  console.log('=== NOTIFICATION COMPLETE ===');
-};
+    
+    console.log('Notified all components about fixed deposit update');
+  };
 
   // FIXED: Calculate active fixed deposits total with localStorage fallback
   const getActiveFixedDepositsTotal = () => {

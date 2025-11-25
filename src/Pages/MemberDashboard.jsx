@@ -14,248 +14,131 @@ const MemberDashboard = () => {
   const [transactionReference, setTransactionReference] = useState("");
   const [transferDate, setTransferDate] = useState("");
   const [paymentCategory, setPaymentCategory] = useState("savings");
-
-  // NEW: Fixed deposit states
-  const [memberFixedDeposits, setMemberFixedDeposits] = useState(() => {
-    const userData = JSON.parse(localStorage.getItem('userData'));
-    const memberId = userData?.id;
-    const savedFixedDeposits = memberId ? localStorage.getItem(`fixed_deposits_${memberId}`) : null;
-    return savedFixedDeposits ? JSON.parse(savedFixedDeposits) : [];
-  });
   
+  // Fixed deposit states - initialize empty, will be populated from API
+  const [memberFixedDeposits, setMemberFixedDeposits] = useState([]);
   const [loadingFixedDeposits, setLoadingFixedDeposits] = useState(false);
 
   const API_URL = "https://irorunde1-production.up.railway.app/api/";
 
-  // NEW: Effect for fixed deposit updates
-  // Enhanced useEffect for fixed deposit updates
-useEffect(() => {
-  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const memberId = userData?.id;
-  
-  if (!memberId) return;
+  // Simplified useEffect - just fetch data from API
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    
+    if (!token || !userData) {
+      // Redirect to login if not authenticated
+      window.location.href = '/login';
+      return;
+    }
+    
+    setUserData(userData);
+    
+    // Fetch all data from API
+    refreshAllData();
+  }, []);
 
-  console.log('Setting up fixed deposit listeners for member:', memberId);
-
-  // Load initial data
-  const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
-  if (savedFixedDeposits) {
+  // Simplified refresh function
+  const refreshAllData = async () => {
+    setLoading(true);
+    const token = localStorage.getItem('accessToken');
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    
     try {
-      const parsedDeposits = JSON.parse(savedFixedDeposits);
-      setMemberFixedDeposits(parsedDeposits);
-      updateDashboardWithFixedDeposits(parsedDeposits);
+      // Fetch all data in parallel
+      await Promise.all([
+        fetchDashboardData(token),
+        fetchPaymentHistory(token),
+        fetchGroupAccount(token),
+        fetchMemberFixedDeposits(token) // Always fetch from API
+      ]);
     } catch (error) {
-      console.error("Error parsing saved fixed deposits:", error);
-    }
-  }
-
-  // Listen for admin updates via custom event
-  const handleFixedDepositUpdate = (event) => {
-    console.log('Received fixed deposit update event:', event.detail);
-    
-    // Check if this update is for this member
-    if (event.detail?.memberId === memberId) {
-      console.log('Update is for this member, processing...');
-      
-      if (event.detail.action === 'collected') {
-        // Update the specific deposit as collected
-        setMemberFixedDeposits(prev => {
-          const updated = prev.map(deposit => 
-            deposit.id === event.detail.depositId || deposit.payment_reference === event.detail.depositId
-              ? { 
-                  ...deposit, 
-                  is_active: false, 
-                  status: 'collected',
-                  collected_at: new Date().toISOString()
-                }
-              : deposit
-          );
-          
-          // Update localStorage
-          localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(updated));
-          updateDashboardWithFixedDeposits(updated);
-          
-          return updated;
-        });
-      } else if (event.detail.action === 'refresh') {
-        // Force refresh from API
-        forceRefreshFixedDepositsFromAPI();
-      }
+      console.error('Error refreshing data:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Listen for storage changes (cross-tab synchronization) - FIXED
-  const handleStorageChange = (event) => {
-    console.log('Storage change detected:', event.key, event.newValue ? 'has new value' : 'cleared');
-    
-    // Check multiple possible key patterns
-    const possibleKeys = [
-      `fixed_deposits_${memberId}`,
-      'fixed_deposit_updated' // From admin notification
-    ];
-    
-    if (possibleKeys.includes(event.key) && event.newValue) {
-      try {
-        if (event.key === `fixed_deposits_${memberId}`) {
-          // Direct update to this member's fixed deposits
-          const updatedFixedDeposits = JSON.parse(event.newValue);
-          console.log('Updating fixed deposits from storage:', updatedFixedDeposits);
-          setMemberFixedDeposits(updatedFixedDeposits);
-          updateDashboardWithFixedDeposits(updatedFixedDeposits);
-        } else if (event.key === 'fixed_deposit_updated') {
-          // Admin notification - check if it's for this member
-          const notification = JSON.parse(event.newValue);
-          if (notification.memberId === memberId) {
-            console.log('Admin notification for this member, refreshing...');
-            refreshFixedDeposits();
-          }
-        }
-      } catch (error) {
-        console.error("Error parsing storage change:", error);
-      }
-    }
-  };
-
-  // Listen for broadcast messages
-  const handleBroadcastMessage = (event) => {
-    console.log('Broadcast message received:', event.data);
-    
-    if (event.data?.memberId === memberId) {
-      if (event.data.action === 'collected') {
-        // Update the specific deposit
-        setMemberFixedDeposits(prev => {
-          const updated = prev.map(deposit => 
-            deposit.id === event.data.depositId || deposit.payment_reference === event.data.depositId
-              ? { 
-                  ...deposit, 
-                  is_active: false, 
-                  status: 'collected',
-                  collected_at: new Date().toISOString()
-                }
-              : deposit
-          );
-          
-          localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(updated));
-          updateDashboardWithFixedDeposits(updated);
-          
-          return updated;
-        });
-      } else if (event.data.action === 'new_deposit') {
-        // Add new deposit
-        setMemberFixedDeposits(prev => {
-          const exists = prev.some(d => d.id === event.data.deposit.id);
-          if (!exists) {
-            const updated = [...prev, event.data.deposit];
-            localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(updated));
-            updateDashboardWithFixedDeposits(updated);
-            return updated;
-          }
-          return prev;
-        });
-      }
-    }
-  };
-
-  // Add event listeners
-  window.addEventListener('fixedDepositUpdate', handleFixedDepositUpdate);
-  window.addEventListener('storage', handleStorageChange);
-  
-  let broadcastChannel = null;
-  try {
-    broadcastChannel = new BroadcastChannel('fixed_deposit_updates');
-    broadcastChannel.addEventListener('message', handleBroadcastMessage);
-  } catch (e) {
-    console.log('BroadcastChannel not supported');
-  }
-  
-  // Cleanup function
-  return () => {
-    window.removeEventListener('fixedDepositUpdate', handleFixedDepositUpdate);
-    window.removeEventListener('storage', handleStorageChange);
-    
-    if (broadcastChannel) {
-      broadcastChannel.removeEventListener('message', handleBroadcastMessage);
-      broadcastChannel.close();
-    }
-  };
-}, [memberId, updateDashboardWithFixedDeposits]); // Remove markFixedDepositAsCollected from dependencies
-
-// Add a manual refresh function for testing
-// const testRefresh = () => {
-//   console.log('Manual refresh triggered');
-//   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-//   const memberId = userData?.id;
-  
-//   if (memberId) {
-//     const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
-//     if (savedFixedDeposits) {
-//       const updatedFixedDeposits = JSON.parse(savedFixedDeposits);
-//       console.log('Manual refresh - updating with:', updatedFixedDeposits);
-//       setMemberFixedDeposits(updatedFixedDeposits);
-//       updateDashboardWithFixedDeposits(updatedFixedDeposits);
-//     }
-//   }
-// };
-
-// Add this button temporarily for testing
-// <button onClick={testRefresh}>Test Refresh Fixed Deposits</button>
-
-  // NEW: Force refresh fixed deposits from API (not just localStorage)
-  const forceRefreshFixedDepositsFromAPI = async () => {
-    const token = localStorage.getItem('accessToken');
-    const userData = JSON.parse(localStorage.getItem('userData'));
-    const memberId = userData?.id;
-    
-    if (token && memberId) {
-      console.log('Force refreshing fixed deposits from API...');
-      await fetchMemberFixedDepositsFromAPI(memberId, token, true);
-    }
-  };
-
-  // NEW: Function to update dashboard with fixed deposits
-  const updateDashboardWithFixedDeposits = (fixedDeposits) => {
-    const activeDepositsTotal = fixedDeposits
-      .filter(fd => fd.is_active !== false)
-      .reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
-
-    setDashboardData(prev => {
-      if (!prev || !prev.financial_summary) return prev;
-      
-      return {
-        ...prev,
-        financial_summary: {
-          ...prev.financial_summary,
-          fixed_deposits: activeDepositsTotal,
-          active_fixed_deposits: activeDepositsTotal,
-          fixed_deposit_count: fixedDeposits.filter(fd => fd.is_active !== false).length
-        }
-      };
-    });
-  };
-
-  // NEW: Function to refresh fixed deposits
-  const refreshFixedDeposits = async () => {
-    const token = localStorage.getItem('accessToken');
-    const userData = JSON.parse(localStorage.getItem('userData'));
-    const memberId = userData?.id;
-    
-    if (token && memberId) {
-      await fetchMemberFixedDeposits(memberId, token);
-    }
-  };
-
-  // NEW: Enhanced function to fetch fixed deposits from API
-  const fetchMemberFixedDepositsFromAPI = async (memberId, token, forceRefresh = false) => {
+  // Fetch dashboard data
+  const fetchDashboardData = async (token) => {
     try {
-      console.log('Fetching fixed deposits from API for member:', memberId);
+      const response = await fetch(`${API_URL}user/dashboard/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       
-      // Try API endpoints for fixed deposits
+      if (response.ok) {
+        const data = await response.json();
+        setDashboardData(data);
+      } else {
+        if (response.status === 401) {
+          handleLogout();
+          return;
+        }
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to load dashboard');
+      }
+    } catch (err) {
+      console.error('Error fetching dashboard:', err);
+      setError('Network error loading dashboard');
+    }
+  };
+
+  // Fetch payment history
+  const fetchPaymentHistory = async (token) => {
+    try {
+      const response = await fetch(`${API_URL}user/combined-payment-history/`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPaymentHistory(data);
+      } else {
+        console.error("Failed to load payment history:", response.status);
+      }
+    } catch (err) {
+      console.error("Payment history fetch error:", err);
+    }
+  };
+
+  // Fetch group account
+  const fetchGroupAccount = async (token) => {
+    try {
+      const response = await fetch(`${API_URL}payments/group-account/`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setGroupAccount(data);
+      } else {
+        console.error("Failed to load group account:", response.status);
+      }
+    } catch (err) {
+      console.error("Group account fetch error:", err);
+    }
+  };
+
+  // Simplified fixed deposits fetch - always from API
+  const fetchMemberFixedDeposits = async (token) => {
+    setLoadingFixedDeposits(true);
+    try {
+      console.log('Fetching fixed deposits from API...');
+      
+      // Try multiple endpoints
       const endpoints = [
         `${API_URL}user/fixed-deposits/`,
-        `${API_URL}fixed-deposits/member/${memberId}/`,
-        `${API_URL}members/${memberId}/fixed-deposits/`,
-        `${API_URL}admin/fixed-deposits/?member=${memberId}`,
-        `${API_URL}fixed-deposits/?member=${memberId}`
+        `${API_URL}fixed-deposits/member/${userData?.id}/`,
+        `${API_URL}members/${userData?.id}/fixed-deposits/`,
+        `${API_URL}fixed-deposits/?member=${userData?.id}`,
+        `${API_URL}admin/fixed-deposits/?member=${userData?.id}`
       ];
 
       let fixedDepositsData = [];
@@ -263,7 +146,7 @@ useEffect(() => {
 
       for (const endpoint of endpoints) {
         try {
-          console.log('Trying API endpoint:', endpoint);
+          console.log('Trying endpoint:', endpoint);
           const response = await fetch(endpoint, {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -272,7 +155,7 @@ useEffect(() => {
 
           if (response.ok) {
             const data = await response.json();
-            console.log('Fixed deposits API response from', endpoint, ':', data);
+            console.log('Fixed deposits data from', endpoint, ':', data);
             
             // Handle different response formats
             if (Array.isArray(data)) {
@@ -298,236 +181,72 @@ useEffect(() => {
                           deposit.status === 'collected' ? false : true,
                 duration_months: deposit.duration_months || 12,
                 interest_rate: deposit.interest_rate || 0,
-                member: deposit.member || memberId,
+                member: deposit.member || userData?.id,
                 payment_reference: deposit.payment_reference || deposit.reference,
                 collected_at: deposit.collected_at,
                 status: deposit.status || 'active'
               }));
               
-              // Save to both state and localStorage
               setMemberFixedDeposits(processedDeposits);
-              localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(processedDeposits));
-              updateDashboardWithFixedDeposits(processedDeposits);
-              
               success = true;
               break;
             }
           } else {
-            console.log(`API endpoint ${endpoint} returned status:`, response.status);
+            console.log(`Endpoint ${endpoint} returned status:`, response.status);
           }
         } catch (err) {
-          console.log(`API endpoint ${endpoint} error:`, err);
+          console.log(`Endpoint ${endpoint} error:`, err);
         }
       }
 
+      // If no fixed deposits found via API, create from payment history
       if (!success) {
-        console.log('No fixed deposits found via API, will check payment history');
-        if (forceRefresh) {
-          await createFixedDepositsFromPaymentHistory();
-        }
+        console.log('No fixed deposits found via API, checking payment history...');
+        createFixedDepositsFromPaymentHistory();
       }
       
     } catch (err) {
       console.error("All fixed deposit API endpoints failed:", err);
-      if (forceRefresh) {
-        await createFixedDepositsFromPaymentHistory();
-      }
-    }
-  };
-
-  // NEW: Function to fetch fixed deposits (main function)
-  const fetchMemberFixedDeposits = async (memberId, token) => {
-    setLoadingFixedDeposits(true);
-    try {
-      console.log('Fetching fixed deposits for member in MemberDashboard:', memberId);
-      
-      // Check localStorage first, but still call API to ensure we have latest data
-      const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
-      if (savedFixedDeposits) {
-        const parsedDeposits = JSON.parse(savedFixedDeposits);
-        if (parsedDeposits.length > 0) {
-          console.log('Using fixed deposits from localStorage in MemberDashboard:', parsedDeposits);
-          setMemberFixedDeposits(parsedDeposits);
-          updateDashboardWithFixedDeposits(parsedDeposits);
-        }
-      }
-
-      // Always try to get fresh data from API
-      await fetchMemberFixedDepositsFromAPI(memberId, token);
-      
-    } catch (err) {
-      console.error("Error fetching fixed deposits:", err);
-      await createFixedDepositsFromPaymentHistory();
+      createFixedDepositsFromPaymentHistory();
     } finally {
       setLoadingFixedDeposits(false);
     }
   };
 
-  // NEW: Function to create fixed deposits from payment history
-  const createFixedDepositsFromPaymentHistory = async () => {
+  // Create fixed deposits from payment history as fallback
+  const createFixedDepositsFromPaymentHistory = () => {
     try {
-      const userData = JSON.parse(localStorage.getItem('userData'));
-      const memberId = userData?.id;
-      
-      if (!memberId) return;
-      
-      console.log('Creating fixed deposits from payment history in MemberDashboard...');
+      console.log('Creating fixed deposits from payment history...');
       
       const fixedDepositPayments = paymentHistory.filter(payment => 
         payment.payment_type === 'fixed_deposit' && 
         (payment.status === 'confirmed' || payment.is_successful)
       );
 
-      console.log('Fixed deposit payments found in MemberDashboard payment history:', fixedDepositPayments);
+      console.log('Fixed deposit payments found in payment history:', fixedDepositPayments);
 
       if (fixedDepositPayments.length > 0) {
         const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
           id: `temp-fd-${payment.id || index}`,
           amount: payment.amount,
           created_at: payment.date || payment.created_at,
-          is_active: true, // Assume active until collected by admin
+          is_active: true,
           duration_months: 12,
           interest_rate: 0,
-          member: memberId,
+          member: userData?.id,
           payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
           _source: 'payment_history'
         }));
 
-        console.log('Created fixed deposits from payments in MemberDashboard:', fixedDepositsFromPayments);
-        
-        // Save to both state and localStorage
+        console.log('Created fixed deposits from payments:', fixedDepositsFromPayments);
         setMemberFixedDeposits(fixedDepositsFromPayments);
-        localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(fixedDepositsFromPayments));
-        updateDashboardWithFixedDeposits(fixedDepositsFromPayments);
       } else {
-        console.log('No fixed deposit payments found in MemberDashboard payment history');
+        console.log('No fixed deposit payments found in payment history');
         setMemberFixedDeposits([]);
-        localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify([]));
       }
     } catch (err) {
-      console.error('Error creating fixed deposits from payment history in MemberDashboard:', err);
-    }
-  };
-
-  // MODIFIED: Refresh all data function
-  const refreshAllData = async () => {
-    setLoading(true);
-    const token = localStorage.getItem('accessToken');
-    const userData = JSON.parse(localStorage.getItem('userData'));
-    const memberId = userData?.id;
-    
-    await Promise.all([
-      fetchDashboardData(),
-      fetchPaymentHistory(),
-      fetchGroupAccount(),
-      ...(memberId ? [fetchMemberFixedDeposits(memberId, token)] : [])
-    ]);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    refreshAllData();
-  }, []);
-
-  // NEW: Helper function to get active fixed deposits total
-  const getActiveFixedDepositsTotal = () => {
-    // Use memberFixedDeposits state as primary source
-    if (memberFixedDeposits.length > 0) {
-      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
-      const total = activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
-      return total;
-    }
-    
-    // Fallback to dashboard data
-    return dashboardData?.financial_summary?.fixed_deposits || 0;
-  };
-
-  // NEW: Helper function to get collected fixed deposits total
-  const getCollectedFixedDepositsTotal = () => {
-    if (memberFixedDeposits.length > 0) {
-      const collectedDeposits = memberFixedDeposits.filter(fd => fd.is_active === false);
-      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
-    }
-    return 0;
-  };
-
-  const fetchDashboardData = async () => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      const storedUserData = localStorage.getItem('userData');
-      
-      if (storedUserData) {
-        setUserData(JSON.parse(storedUserData));
-      }
-
-      const response = await fetch(`${API_URL}user/dashboard/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("Dashboard data:", data);
-        setDashboardData(data);
-        setError(null);
-      } else {
-        // Handle unauthorized (token expired)
-        if (response.status === 401) {
-          handleLogout();
-          return;
-        }
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to load dashboard');
-      }
-    } catch (err) {
-      console.error('Error fetching dashboard:', err);
-      setError('Network error loading dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch combined payment history
-  const fetchPaymentHistory = async () => {
-    try {
-      const token = localStorage.getItem("accessToken");
-      const response = await fetch(`${API_URL}user/combined-payment-history/`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("Payment history data:", data);
-        setPaymentHistory(data);
-      } else {
-        console.error("Failed to load payment history:", response.status);
-      }
-    } catch (err) {
-      console.error("Payment history fetch error:", err);
-    }
-  };
-
-  // Fetch group account details
-  const fetchGroupAccount = async () => {
-    try {
-      const token = localStorage.getItem("accessToken");
-      const response = await fetch(`${API_URL}payments/group-account/`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setGroupAccount(data);
-      } else {
-        console.error("Failed to load group account:", response.status);
-      }
-    } catch (err) {
-      console.error("Group account fetch error:", err);
+      console.error('Error creating fixed deposits from payment history:', err);
+      setMemberFixedDeposits([]);
     }
   };
 
@@ -601,7 +320,6 @@ useEffect(() => {
     setPaymentCategory("savings");
   };
 
-  
   // Function to copy account number to clipboard
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -622,6 +340,23 @@ useEffect(() => {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('userData');
     window.location.href = '/login';
+  };
+
+  // Helper functions to calculate totals
+  const getActiveFixedDepositsTotal = () => {
+    if (memberFixedDeposits.length > 0) {
+      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
+      return activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+    }
+    return dashboardData?.financial_summary?.fixed_deposits || 0;
+  };
+
+  const getCollectedFixedDepositsTotal = () => {
+    if (memberFixedDeposits.length > 0) {
+      const collectedDeposits = memberFixedDeposits.filter(fd => fd.is_active === false);
+      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+    }
+    return 0;
   };
 
   // Enhanced financial cards with paid amounts
@@ -973,7 +708,7 @@ useEffect(() => {
                 type="loan"
               />
               
-              {/* UPDATED: Fixed Deposits card using real-time data */}
+              {/* Fixed Deposits card using real-time data */}
               <FinancialCard
                 title="Fixed Deposits"
                 amount={getActiveFixedDepositsTotal()}
@@ -992,13 +727,13 @@ useEffect(() => {
               />
             </div>
 
-            {/* NEW: Fixed Deposits Summary */}
+            {/* Fixed Deposits Summary */}
             {memberFixedDeposits.length > 0 && (
               <div className="mt-6 bg-white shadow rounded-lg p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="text-md font-medium text-gray-900">Fixed Deposits Summary</h4>
                   <button
-                    onClick={refreshFixedDeposits}
+                    onClick={() => fetchMemberFixedDeposits(localStorage.getItem('accessToken'))}
                     disabled={loadingFixedDeposits}
                     className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1"
                   >
@@ -1037,7 +772,7 @@ useEffect(() => {
                   Your Payment History ({paymentHistory.length} transactions)
                 </h3>
                 <button
-                  onClick={fetchPaymentHistory}
+                  onClick={() => fetchPaymentHistory(localStorage.getItem('accessToken'))}
                   className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm"
                 >
                   Refresh
