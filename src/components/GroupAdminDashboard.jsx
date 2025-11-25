@@ -1273,7 +1273,7 @@ const AddMemberModal = ({ onClose, onAddMember, user }) => {
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                   required
                   disabled={isSubmitting}
-                  placeholder="member@example.com"
+                  placeholder="member@gmail.com"
                 />
               </div>
               

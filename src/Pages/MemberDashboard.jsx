@@ -202,6 +202,11 @@ const MemberDashboard = () => {
     //   return;
     // }
 
+     if (!amount || parseFloat(amount) <= 0) {
+    alert("Please enter a valid amount greater than 0.");
+    return;
+  }
+
     if (!dashboardData?.member_info?.group_id) {
       alert("Missing group information.");
       return;
