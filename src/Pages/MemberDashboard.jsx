@@ -15,16 +15,258 @@ const MemberDashboard = () => {
   const [transferDate, setTransferDate] = useState("");
   const [paymentCategory, setPaymentCategory] = useState("savings");
 
+  // NEW: Fixed deposit states
+  const [memberFixedDeposits, setMemberFixedDeposits] = useState(() => {
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    const memberId = userData?.id;
+    const savedFixedDeposits = memberId ? localStorage.getItem(`fixed_deposits_${memberId}`) : null;
+    return savedFixedDeposits ? JSON.parse(savedFixedDeposits) : [];
+  });
+  
+  const [loadingFixedDeposits, setLoadingFixedDeposits] = useState(false);
+
   const API_URL = "https://irorunde1-production.up.railway.app/api/";
 
+  // NEW: Effect for fixed deposit updates
+  useEffect(() => {
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    const memberId = userData?.id;
+    
+    if (!memberId) return;
 
-  // Add refresh function
+    // Load fixed deposits from localStorage on component mount
+    const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
+    if (savedFixedDeposits) {
+      const parsedDeposits = JSON.parse(savedFixedDeposits);
+      setMemberFixedDeposits(parsedDeposits);
+      updateDashboardWithFixedDeposits(parsedDeposits);
+    }
+
+    // Listen for fixed deposit updates from admin
+    const handleFixedDepositUpdate = (event) => {
+      if (event.detail?.memberId === memberId) {
+        console.log('Received fixed deposit update event in MemberDashboard:', event.detail);
+        refreshFixedDeposits();
+      }
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key === `fixed_deposits_${memberId}` && event.newValue) {
+        console.log('LocalStorage updated in MemberDashboard, refreshing fixed deposits');
+        const updatedFixedDeposits = JSON.parse(event.newValue);
+        setMemberFixedDeposits(updatedFixedDeposits);
+        
+        // Update dashboard data with new fixed deposit totals
+        updateDashboardWithFixedDeposits(updatedFixedDeposits);
+      }
+    };
+
+    // Listen for broadcast messages
+    const handleBroadcastMessage = (event) => {
+      if (event.data?.memberId === memberId && event.data.action === 'collected') {
+        console.log('Received broadcast message in MemberDashboard:', event.data);
+        refreshFixedDeposits();
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('fixedDepositUpdate', handleFixedDepositUpdate);
+    window.addEventListener('storage', handleStorageChange);
+    
+    try {
+      const broadcastChannel = new BroadcastChannel('fixed_deposit_updates');
+      broadcastChannel.addEventListener('message', handleBroadcastMessage);
+      
+      // Cleanup function
+      return () => {
+        window.removeEventListener('fixedDepositUpdate', handleFixedDepositUpdate);
+        window.removeEventListener('storage', handleStorageChange);
+        broadcastChannel.removeEventListener('message', handleBroadcastMessage);
+        broadcastChannel.close();
+      };
+    } catch (e) {
+      console.log('BroadcastChannel not supported in MemberDashboard');
+      
+      return () => {
+        window.removeEventListener('fixedDepositUpdate', handleFixedDepositUpdate);
+        window.removeEventListener('storage', handleStorageChange);
+      };
+    }
+  }, []);
+
+  // NEW: Function to update dashboard with fixed deposits
+  const updateDashboardWithFixedDeposits = (fixedDeposits) => {
+    const activeDepositsTotal = fixedDeposits
+      .filter(fd => fd.is_active !== false)
+      .reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+
+    setDashboardData(prev => {
+      if (!prev || !prev.financial_summary) return prev;
+      
+      return {
+        ...prev,
+        financial_summary: {
+          ...prev.financial_summary,
+          fixed_deposits: activeDepositsTotal,
+          active_fixed_deposits: activeDepositsTotal,
+          fixed_deposit_count: fixedDeposits.filter(fd => fd.is_active !== false).length
+        }
+      };
+    });
+  };
+
+  // NEW: Function to refresh fixed deposits
+  const refreshFixedDeposits = async () => {
+    const token = localStorage.getItem('accessToken');
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    const memberId = userData?.id;
+    
+    if (token && memberId) {
+      await fetchMemberFixedDeposits(memberId, token);
+    }
+  };
+
+  // NEW: Function to fetch fixed deposits
+  const fetchMemberFixedDeposits = async (memberId, token) => {
+    setLoadingFixedDeposits(true);
+    try {
+      console.log('Fetching fixed deposits for member in MemberDashboard:', memberId);
+      
+      // Check localStorage first
+      const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
+      if (savedFixedDeposits) {
+        const parsedDeposits = JSON.parse(savedFixedDeposits);
+        if (parsedDeposits.length > 0) {
+          console.log('Using fixed deposits from localStorage in MemberDashboard:', parsedDeposits);
+          setMemberFixedDeposits(parsedDeposits);
+          updateDashboardWithFixedDeposits(parsedDeposits);
+          setLoadingFixedDeposits(false);
+          return;
+        }
+      }
+
+      // Try API endpoints for fixed deposits
+      const endpoints = [
+        `${API_URL}user/fixed-deposits/`,
+        `${API_URL}fixed-deposits/member/${memberId}/`,
+        `${API_URL}members/${memberId}/fixed-deposits/`,
+      ];
+
+      let fixedDepositsData = [];
+      let success = false;
+
+      for (const endpoint of endpoints) {
+        try {
+          console.log('Trying endpoint in MemberDashboard:', endpoint);
+          const response = await fetch(endpoint, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Fixed deposits data from MemberDashboard:', endpoint, ':', data);
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+              fixedDepositsData = data;
+            } else if (data.results && Array.isArray(data.results)) {
+              fixedDepositsData = data.results;
+            } else if (data.fixed_deposits && Array.isArray(data.fixed_deposits)) {
+              fixedDepositsData = data.fixed_deposits;
+            } else if (data.data && Array.isArray(data.data)) {
+              fixedDepositsData = data.data;
+            }
+            
+            if (fixedDepositsData.length > 0) {
+              console.log('Found fixed deposits via API in MemberDashboard:', fixedDepositsData);
+              
+              // Save to both state and localStorage
+              setMemberFixedDeposits(fixedDepositsData);
+              localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(fixedDepositsData));
+              updateDashboardWithFixedDeposits(fixedDepositsData);
+              
+              success = true;
+              break;
+            }
+          }
+        } catch (err) {
+          console.log(`Endpoint ${endpoint} error in MemberDashboard:`, err);
+        }
+      }
+
+      if (!success) {
+        console.log('No fixed deposits found via API in MemberDashboard, creating from payment history...');
+        await createFixedDepositsFromPaymentHistory();
+      }
+      
+    } catch (err) {
+      console.error("All fixed deposit endpoints failed in MemberDashboard:", err);
+      await createFixedDepositsFromPaymentHistory();
+    } finally {
+      setLoadingFixedDeposits(false);
+    }
+  };
+
+  // NEW: Function to create fixed deposits from payment history
+  const createFixedDepositsFromPaymentHistory = async () => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('userData'));
+      const memberId = userData?.id;
+      
+      console.log('Creating fixed deposits from payment history in MemberDashboard...');
+      
+      const fixedDepositPayments = paymentHistory.filter(payment => 
+        payment.payment_type === 'fixed_deposit' && 
+        (payment.status === 'confirmed' || payment.is_successful)
+      );
+
+      console.log('Fixed deposit payments found in MemberDashboard payment history:', fixedDepositPayments);
+
+      if (fixedDepositPayments.length > 0) {
+        const fixedDepositsFromPayments = fixedDepositPayments.map((payment, index) => ({
+          id: `temp-fd-${payment.id || index}`,
+          amount: payment.amount,
+          created_at: payment.date || payment.created_at,
+          is_active: true,
+          duration_months: 12,
+          interest_rate: 0,
+          member: memberId,
+          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+          _source: 'payment_history'
+        }));
+
+        console.log('Created fixed deposits from payments in MemberDashboard:', fixedDepositsFromPayments);
+        
+        // Save to both state and localStorage
+        setMemberFixedDeposits(fixedDepositsFromPayments);
+        localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(fixedDepositsFromPayments));
+        updateDashboardWithFixedDeposits(fixedDepositsFromPayments);
+      } else {
+        console.log('No fixed deposit payments found in MemberDashboard payment history');
+        setMemberFixedDeposits([]);
+        if (memberId) {
+          localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify([]));
+        }
+      }
+    } catch (err) {
+      console.error('Error creating fixed deposits from payment history in MemberDashboard:', err);
+    }
+  };
+
+  // MODIFIED: Refresh all data function
   const refreshAllData = async () => {
     setLoading(true);
+    const token = localStorage.getItem('accessToken');
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    const memberId = userData?.id;
+    
     await Promise.all([
       fetchDashboardData(),
       fetchPaymentHistory(),
-      fetchGroupAccount()
+      fetchGroupAccount(),
+      ...(memberId ? [fetchMemberFixedDeposits(memberId, token)] : [])
     ]);
     setLoading(false);
   };
@@ -33,7 +275,27 @@ const MemberDashboard = () => {
     refreshAllData();
   }, []);
 
+  // NEW: Helper function to get active fixed deposits total
+  const getActiveFixedDepositsTotal = () => {
+    // Use memberFixedDeposits state as primary source
+    if (memberFixedDeposits.length > 0) {
+      const activeDeposits = memberFixedDeposits.filter(fd => fd.is_active !== false);
+      const total = activeDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+      return total;
+    }
+    
+    // Fallback to dashboard data
+    return dashboardData?.financial_summary?.fixed_deposits || 0;
+  };
 
+  // NEW: Helper function to get collected fixed deposits total
+  const getCollectedFixedDepositsTotal = () => {
+    if (memberFixedDeposits.length > 0) {
+      const collectedDeposits = memberFixedDeposits.filter(fd => fd.is_active === false);
+      return collectedDeposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+    }
+    return 0;
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -208,7 +470,7 @@ const MemberDashboard = () => {
     window.location.href = '/login';
   };
 
-  // NEW: Enhanced financial cards with paid amounts
+  // Enhanced financial cards with paid amounts
   const FinancialCard = ({ title, amount, paidAmount, icon, color, type = 'default' }) => (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
@@ -229,9 +491,9 @@ const MemberDashboard = () => {
                 </dt>
               )}
               {/* Show count for fixed deposits */}
-              {type === 'fixed_deposit' && dashboardData?.financial_summary?.fixed_deposit_count > 0 && (
+              {type === 'fixed_deposit' && memberFixedDeposits.filter(fd => fd.is_active !== false).length > 0 && (
                 <dt className="text-xs font-medium text-gray-400 truncate">
-                  {dashboardData.financial_summary.fixed_deposit_count} deposit(s)
+                  {memberFixedDeposits.filter(fd => fd.is_active !== false).length} active deposit(s)
                 </dt>
               )}
             </dl>
@@ -557,9 +819,10 @@ const MemberDashboard = () => {
                 type="loan"
               />
               
+              {/* UPDATED: Fixed Deposits card using real-time data */}
               <FinancialCard
                 title="Fixed Deposits"
-                amount={dashboardData.financial_summary?.fixed_deposits}
+                amount={getActiveFixedDepositsTotal()}
                 icon={icons.fixed}
                 color="blue"
                 type="fixed_deposit"
@@ -574,6 +837,27 @@ const MemberDashboard = () => {
                 type="loan"
               />
             </div>
+
+            {/* NEW: Fixed Deposits Summary */}
+            {memberFixedDeposits.length > 0 && (
+              <div className="mt-6 bg-white shadow rounded-lg p-6">
+                <h4 className="text-md font-medium text-gray-900 mb-4">Fixed Deposits Summary</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{memberFixedDeposits.filter(fd => fd.is_active !== false).length}</div>
+                    <div className="text-sm text-gray-600">Active Deposits</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{memberFixedDeposits.filter(fd => fd.is_active === false).length}</div>
+                    <div className="text-sm text-gray-600">Collected Deposits</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-amber-600">{memberFixedDeposits.length}</div>
+                    <div className="text-sm text-gray-600">Total Deposits</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Payment History */}
@@ -690,229 +974,229 @@ const MemberDashboard = () => {
         </div>
       </main>
 
-      {/* UPDATED: Modern Payment Modal */}
-{showPaymentModal && (
-  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
-    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-white">Make a Payment</h2>
-            <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
-          </div>
-          <button
-            onClick={handleCloseModal}
-            className="text-white hover:text-amber-200 transition-colors"
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="p-6 max-h-[70vh] overflow-y-auto">
-        {/* Group Account Card */}
-        {groupAccount && (
-          <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
-            <div className="flex items-start space-x-3">
-              <div className="bg-emerald-100 rounded-lg p-2">
-                <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
+      {/* Modern Payment Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Make a Payment</h2>
+                  <p className="text-amber-100 text-sm mt-1">Select category and enter payment details</p>
+                </div>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-white hover:text-amber-200 transition-colors"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-emerald-800 text-sm mb-2">Transfer to Group Account</h3>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-emerald-600 font-medium">Bank:</span>
-                    <span className="text-emerald-900">{groupAccount.bank_name || "Not set"}</span>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              {/* Group Account Card */}
+              {groupAccount && (
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl p-4 mb-6">
+                  <div className="flex items-start space-x-3">
+                    <div className="bg-emerald-100 rounded-lg p-2">
+                      <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-emerald-800 text-sm mb-2">Transfer to Group Account</h3>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-emerald-600 font-medium">Bank:</span>
+                          <span className="text-emerald-900">{groupAccount.bank_name || "Not set"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-emerald-600 font-medium">Account No:</span>
+                          <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-emerald-600 font-medium">Account Name:</span>
+                          <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-emerald-600 font-medium">Account No:</span>
-                    <span className="text-emerald-900 font-mono">{groupAccount.account_number || "Not set"}</span>
+                </div>
+              )}
+
+              {/* Payment Category Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-3">
+                  What are you paying for?
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { value: "savings", label: "Savings", icon: "💰", color: "green" },
+                    { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
+                    { value: "outstanding_balance", label: "Outstanding Balance", icon: "⚡", color: "yellow" },
+                    { value: "investment_loan", label: "Investment Loan", icon: "📈", color: "purple" }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setPaymentCategory(option.value)}
+                      className={`p-3 rounded-xl border-2 transition-all duration-200 ${
+                        paymentCategory === option.value
+                          ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="text-2xl mb-1">{option.icon}</div>
+                      <div className="text-xs font-medium text-gray-700">{option.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amount Input */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Amount (₦)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 font-medium">₦</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-emerald-600 font-medium">Account Name:</span>
-                    <span className="text-emerald-900">{groupAccount.account_name || "Not set"}</span>
+                  <input
+                    type="number"
+                    placeholder="Enter amount (min: 1,100)"
+                    min="1100"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                    required
+                  />
+                </div>
+                {amount && parseFloat(amount) < 1100 && (
+                  <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
+                )}
+              </div>
+
+              {/* Bank Details Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {/* Bank Name */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Your Bank
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="e.g., First Bank"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Transfer Date */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Transfer Date
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="date"
+                      value={transferDate}
+                      onChange={(e) => setTransferDate(e.target.value)}
+                      className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Transaction Reference */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Transaction Reference
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Enter your name as reference"
+                    value={transactionReference}
+                    onChange={(e) => setTransactionReference(e.target.value)}
+                    className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
+                    required
+                  />
+                </div>
+                <p className="text-gray-500 text-xs mt-2">Use your full name as it appears on your bank account</p>
+              </div>
+
+              {/* Instructions */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <div className="bg-blue-100 rounded-lg p-2">
+                    <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-blue-800 text-sm mb-2">Important Instructions</h4>
+                    <ul className="text-blue-700 text-xs space-y-1">
+                      <li>• Transfer exact amount to the group account</li>
+                      <li>• Use your name as transfer reference</li>
+                      <li>• Payments show as pending until admin confirmation</li>
+                      <li>• Confirmation typically takes 24 hours</li>
+                    </ul>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Payment Category Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-3">
-            What are you paying for?
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { value: "savings", label: "Savings", icon: "💰", color: "green" },
-              { value: "fixed_deposit", label: "Fixed Deposit", icon: "🏦", color: "blue" },
-              { value: "outstanding_balance", label: "Outstanding Balance", icon: "⚡", color: "yellow" },
-              { value: "investment_loan", label: "Investment Loan", icon: "📈", color: "purple" }
-            ].map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setPaymentCategory(option.value)}
-                className={`p-3 rounded-xl border-2 transition-all duration-200 ${
-                  paymentCategory === option.value
-                    ? `border-${option.color}-500 bg-${option.color}-50 shadow-sm`
-                    : "border-gray-200 bg-white hover:border-gray-300"
-                }`}
-              >
-                <div className="text-2xl mb-1">{option.icon}</div>
-                <div className="text-xs font-medium text-gray-700">{option.label}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Amount Input */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Amount (₦)
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-gray-500 font-medium">₦</span>
-            </div>
-            <input
-              type="number"
-              placeholder="Enter amount (min: 1,100)"
-              min="1100"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-              required
-            />
-          </div>
-          {amount && parseFloat(amount) < 1100 && (
-            <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
-          )}
-        </div>
-
-        {/* Bank Details Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {/* Bank Name */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Your Bank
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                </svg>
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleCloseModal}
+                  className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleManualPayment}
+                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
+                >
+                  {loadingPayment ? (
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Submitting...</span>
+                    </div>
+                  ) : (
+                    "Submit Payment"
+                  )}
+                </button>
               </div>
-              <input
-                type="text"
-                placeholder="e.g., First Bank"
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Transfer Date */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Transfer Date
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <input
-                type="date"
-                value={transferDate}
-                onChange={(e) => setTransferDate(e.target.value)}
-                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-              />
             </div>
           </div>
         </div>
-
-        {/* Transaction Reference */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            Transaction Reference
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Enter your name as reference"
-              value={transactionReference}
-              onChange={(e) => setTransactionReference(e.target.value)}
-              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
-              required
-            />
-          </div>
-          <p className="text-gray-500 text-xs mt-2">Use your full name as it appears on your bank account</p>
-        </div>
-
-        {/* Instructions */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-          <div className="flex items-start space-x-3">
-            <div className="bg-blue-100 rounded-lg p-2">
-              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-blue-800 text-sm mb-2">Important Instructions</h4>
-              <ul className="text-blue-700 text-xs space-y-1">
-                <li>• Transfer exact amount to the group account</li>
-                <li>• Use your name as transfer reference</li>
-                <li>• Payments show as pending until admin confirmation</li>
-                <li>• Confirmation typically takes 24 hours</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
-        <div className="flex space-x-3">
-          <button
-            onClick={handleCloseModal}
-            className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleManualPayment}
-            disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
-            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
-          >
-            {loadingPayment ? (
-              <div className="flex items-center justify-center space-x-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                <span>Submitting...</span>
-              </div>
-            ) : (
-              "Submit Payment"
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
 };
