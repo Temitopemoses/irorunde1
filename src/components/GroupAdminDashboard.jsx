@@ -321,108 +321,49 @@ const GroupAdminDashboard = () => {
   };
 
   // FIXED: Confirm a manual payment with accessToken
- const confirmPayment = async (paymentId) => {
+// FIXED: Confirm a manual payment with accessToken and balance update
+// FIXED: Confirm a manual payment with accessToken - PROPER REFRESH
+const confirmPayment = async (paymentId) => {
   const token = localStorage.getItem('accessToken');
-  
-  if (!token) {
-    alert('You are not authenticated. Please log in again.');
-    return;
-  }
-
   try {
-    console.log(`=== CONFIRMING PAYMENT ${paymentId} ===`);
+    console.log('Confirming payment with token:', token);
     
     const response = await fetch(`${API_BASE}admin/manual-payments/${paymentId}/confirm/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+      headers: { 
+        Authorization: `Bearer ${token}`, 
+        'Content-Type': 'application/json' 
       },
-      body: JSON.stringify({
-        admin_notes: `Payment confirmed by admin`
-      }),
     });
 
     if (response.ok) {
-      const data = await response.json();
-      console.log(`✅ Payment ${paymentId} confirmed successfully:`, data);
+      showNotification('Payment confirmed successfully!', 'success');
       
-      // CRITICAL: Force refresh of member dashboard data
-      // This ensures member dashboard will get updated data on next load/update
-      localStorage.setItem('force_refresh_member_dashboard', Date.now().toString());
+      // FIX: Refresh in correct sequence with delays to ensure data consistency
+      await fetchPendingPayments();
       
-      // CRITICAL: Immediately add to member's fixed deposits if this was a fixed deposit payment
-      const paymentData = await fetch(`${API_BASE}user/payments/${paymentId}`);
+      // Wait a bit for backend to process
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      if (paymentData.ok) {
-        const payment = paymentData.payment || {};
-        
-        if (payment.payment_type === 'fixed_deposit') {
-          console.log('🎯 FIXED DEPOSIT PAYMENT CONFIRMED!');
-          
-          // Create new fixed deposit object
-          const newFixedDeposit = {
-            id: `fd-${paymentId}`,
-            amount: payment.amount,
-            created_at: payment.date || payment.created_at,
-            is_active: true,
-            duration_months: 12,
-            interest_rate: 0,
-            member: payment.member_id,
-            payment_reference: payment.transaction_reference || payment.reference_number || `FD-${paymentId}`,
-            status: 'active',
-            _source: 'payment_confirmed'
-          };
-          
-          // Immediately add to member's fixed deposits state
-          setMemberFixedDeposits(prev => {
-            const updated = [...prev, newFixedDeposit];
-            console.log('Updated member fixed deposits:', updated);
-            
-            // Update localStorage
-            localStorage.setItem(`fixed_deposits_${payment.member_id}`, JSON.stringify(updated));
-            
-            // Update dashboard financial summary immediately
-            const activeDepositsTotal = updated
-              .filter(fd => fd.is_active !== false)
-              .reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
-            
-            setDashboardData(prev => {
-              if (!prev || !prev.financial_summary) return prev;
-              
-              console.log('🔄 UPDATING DASHBOARD FINANCIAL SUMMARY WITH NEW FIXED DEPOSIT');
-              return {
-                ...prev,
-                financial_summary: {
-                  ...prev.financial_summary,
-                  fixed_deposits: activeDepositsTotal,
-                  active_fixed_deposits: activeDepositsTotal
-                }
-              };
-            });
-            
-            return updated;
-          });
-          
-          // Show notification to user
-          alert(`Fixed deposit payment confirmed! Amount: ₦${payment.amount}`);
-        }
-      }
+      // Refresh contributions which should include the updated balance
+      await fetchContributions();
       
-      // Refresh all data after a short delay
-      setTimeout(() => {
-        refreshAllData();
-      }, 1000);
+      // Wait for contributions to fully load
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Finally refresh dashboard data
+      await fetchDashboardData();
       
     } else {
       const errorData = await response.json();
-      alert(`Failed to confirm payment: ${errorData.error || 'Unknown error'}`);
+      showNotification(`Failed to confirm payment: ${errorData.error || 'Unknown error'}`, 'error');
     }
   } catch (error) {
-    console.error("Error confirming payment:", error);
-    alert("Network error while confirming payment.");
+    console.error('Error confirming payment:', error);
+    showNotification('Error confirming payment', 'error');
   }
 };
+
   // FIXED: Reject a manual payment with accessToken
   const rejectPayment = async (paymentId) => {
     const token = localStorage.getItem('accessToken'); // FIXED: Use accessToken
