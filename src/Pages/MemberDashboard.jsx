@@ -197,10 +197,10 @@ const MemberDashboard = () => {
   const handleManualPayment = async () => {
     const token = localStorage.getItem("accessToken");
 
-    if (!amount || parseFloat(amount) < 1100) {
-      alert("Minimum contribution is ₦1100.");
-      return;
-    }
+    // if (!amount || parseFloat(amount) < 1100) {
+    //   alert("Minimum contribution is ₦1100.");
+    //   return;
+    // }
 
     if (!dashboardData?.member_info?.group_id) {
       alert("Missing group information.");
@@ -918,16 +918,17 @@ const MemberDashboard = () => {
                   </div>
                   <input
                     type="number"
-                    placeholder="Enter amount (min: 1,100)"
-                    min="1100"
+                    placeholder="Enter amount"
+                    min="1"  // Changed from 1100 to 1
+                    step="0.01"  // Allow decimal values
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
                     required
                   />
                 </div>
-                {amount && parseFloat(amount) < 1100 && (
-                  <p className="text-red-500 text-xs mt-2">Minimum amount is ₦1,100</p>
+                {amount && parseFloat(amount) < 0 && (
+                  <p className="text-red-500 text-xs mt-2">Amount must be greater than 0</p>
                 )}
               </div>
 
@@ -1014,6 +1015,7 @@ const MemberDashboard = () => {
                       <li>• Use your name as transfer reference</li>
                       <li>• Payments show as pending until admin confirmation</li>
                       <li>• Confirmation typically takes 24 hours</li>
+                      <li>• You can enter any amount greater than 0</li> {/* Updated instruction */}
                     </ul>
                   </div>
                 </div>
@@ -1031,7 +1033,7 @@ const MemberDashboard = () => {
                 </button>
                 <button
                   onClick={handleManualPayment}
-                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) < 1100}
+                  disabled={loadingPayment || !amount || !bankName || !transactionReference || parseFloat(amount) <= 0}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
                 >
                   {loadingPayment ? (
