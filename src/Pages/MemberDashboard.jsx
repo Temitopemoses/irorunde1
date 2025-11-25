@@ -46,7 +46,8 @@ const MemberDashboard = () => {
     const handleFixedDepositUpdate = (event) => {
       if (event.detail?.memberId === memberId) {
         console.log('Received fixed deposit update event in MemberDashboard:', event.detail);
-        refreshFixedDeposits();
+        // Force refresh from API to get real data
+        forceRefreshFixedDepositsFromAPI();
       }
     };
 
@@ -65,7 +66,8 @@ const MemberDashboard = () => {
     const handleBroadcastMessage = (event) => {
       if (event.data?.memberId === memberId && event.data.action === 'collected') {
         console.log('Received broadcast message in MemberDashboard:', event.data);
-        refreshFixedDeposits();
+        // Force refresh from API to get real data
+        forceRefreshFixedDepositsFromAPI();
       }
     };
 
@@ -93,6 +95,18 @@ const MemberDashboard = () => {
       };
     }
   }, []);
+
+  // NEW: Force refresh fixed deposits from API (not just localStorage)
+  const forceRefreshFixedDepositsFromAPI = async () => {
+    const token = localStorage.getItem('accessToken');
+    const userData = JSON.parse(localStorage.getItem('userData'));
+    const memberId = userData?.id;
+    
+    if (token && memberId) {
+      console.log('Force refreshing fixed deposits from API...');
+      await fetchMemberFixedDepositsFromAPI(memberId, token, true);
+    }
+  };
 
   // NEW: Function to update dashboard with fixed deposits
   const updateDashboardWithFixedDeposits = (fixedDeposits) => {
@@ -126,30 +140,18 @@ const MemberDashboard = () => {
     }
   };
 
-  // NEW: Function to fetch fixed deposits
-  const fetchMemberFixedDeposits = async (memberId, token) => {
-    setLoadingFixedDeposits(true);
+  // NEW: Enhanced function to fetch fixed deposits from API
+  const fetchMemberFixedDepositsFromAPI = async (memberId, token, forceRefresh = false) => {
     try {
-      console.log('Fetching fixed deposits for member in MemberDashboard:', memberId);
+      console.log('Fetching fixed deposits from API for member:', memberId);
       
-      // Check localStorage first
-      const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
-      if (savedFixedDeposits) {
-        const parsedDeposits = JSON.parse(savedFixedDeposits);
-        if (parsedDeposits.length > 0) {
-          console.log('Using fixed deposits from localStorage in MemberDashboard:', parsedDeposits);
-          setMemberFixedDeposits(parsedDeposits);
-          updateDashboardWithFixedDeposits(parsedDeposits);
-          setLoadingFixedDeposits(false);
-          return;
-        }
-      }
-
       // Try API endpoints for fixed deposits
       const endpoints = [
         `${API_URL}user/fixed-deposits/`,
         `${API_URL}fixed-deposits/member/${memberId}/`,
         `${API_URL}members/${memberId}/fixed-deposits/`,
+        `${API_URL}admin/fixed-deposits/?member=${memberId}`,
+        `${API_URL}fixed-deposits/?member=${memberId}`
       ];
 
       let fixedDepositsData = [];
@@ -157,7 +159,7 @@ const MemberDashboard = () => {
 
       for (const endpoint of endpoints) {
         try {
-          console.log('Trying endpoint in MemberDashboard:', endpoint);
+          console.log('Trying API endpoint:', endpoint);
           const response = await fetch(endpoint, {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -166,7 +168,7 @@ const MemberDashboard = () => {
 
           if (response.ok) {
             const data = await response.json();
-            console.log('Fixed deposits data from MemberDashboard:', endpoint, ':', data);
+            console.log('Fixed deposits API response from', endpoint, ':', data);
             
             // Handle different response formats
             if (Array.isArray(data)) {
@@ -180,29 +182,77 @@ const MemberDashboard = () => {
             }
             
             if (fixedDepositsData.length > 0) {
-              console.log('Found fixed deposits via API in MemberDashboard:', fixedDepositsData);
+              console.log('Found fixed deposits via API:', fixedDepositsData);
+              
+              // Process the data to ensure consistent format
+              const processedDeposits = fixedDepositsData.map(deposit => ({
+                id: deposit.id || deposit._id,
+                amount: deposit.amount || deposit.deposit_amount,
+                created_at: deposit.created_at || deposit.date_created,
+                is_active: deposit.is_active !== undefined ? deposit.is_active : 
+                          deposit.status === 'active' ? true : 
+                          deposit.status === 'collected' ? false : true,
+                duration_months: deposit.duration_months || 12,
+                interest_rate: deposit.interest_rate || 0,
+                member: deposit.member || memberId,
+                payment_reference: deposit.payment_reference || deposit.reference,
+                collected_at: deposit.collected_at,
+                status: deposit.status || 'active'
+              }));
               
               // Save to both state and localStorage
-              setMemberFixedDeposits(fixedDepositsData);
-              localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(fixedDepositsData));
-              updateDashboardWithFixedDeposits(fixedDepositsData);
+              setMemberFixedDeposits(processedDeposits);
+              localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify(processedDeposits));
+              updateDashboardWithFixedDeposits(processedDeposits);
               
               success = true;
               break;
             }
+          } else {
+            console.log(`API endpoint ${endpoint} returned status:`, response.status);
           }
         } catch (err) {
-          console.log(`Endpoint ${endpoint} error in MemberDashboard:`, err);
+          console.log(`API endpoint ${endpoint} error:`, err);
         }
       }
 
       if (!success) {
-        console.log('No fixed deposits found via API in MemberDashboard, creating from payment history...');
-        await createFixedDepositsFromPaymentHistory();
+        console.log('No fixed deposits found via API, will check payment history');
+        if (forceRefresh) {
+          await createFixedDepositsFromPaymentHistory();
+        }
       }
       
     } catch (err) {
-      console.error("All fixed deposit endpoints failed in MemberDashboard:", err);
+      console.error("All fixed deposit API endpoints failed:", err);
+      if (forceRefresh) {
+        await createFixedDepositsFromPaymentHistory();
+      }
+    }
+  };
+
+  // NEW: Function to fetch fixed deposits (main function)
+  const fetchMemberFixedDeposits = async (memberId, token) => {
+    setLoadingFixedDeposits(true);
+    try {
+      console.log('Fetching fixed deposits for member in MemberDashboard:', memberId);
+      
+      // Check localStorage first, but still call API to ensure we have latest data
+      const savedFixedDeposits = localStorage.getItem(`fixed_deposits_${memberId}`);
+      if (savedFixedDeposits) {
+        const parsedDeposits = JSON.parse(savedFixedDeposits);
+        if (parsedDeposits.length > 0) {
+          console.log('Using fixed deposits from localStorage in MemberDashboard:', parsedDeposits);
+          setMemberFixedDeposits(parsedDeposits);
+          updateDashboardWithFixedDeposits(parsedDeposits);
+        }
+      }
+
+      // Always try to get fresh data from API
+      await fetchMemberFixedDepositsFromAPI(memberId, token);
+      
+    } catch (err) {
+      console.error("Error fetching fixed deposits:", err);
       await createFixedDepositsFromPaymentHistory();
     } finally {
       setLoadingFixedDeposits(false);
@@ -214,6 +264,8 @@ const MemberDashboard = () => {
     try {
       const userData = JSON.parse(localStorage.getItem('userData'));
       const memberId = userData?.id;
+      
+      if (!memberId) return;
       
       console.log('Creating fixed deposits from payment history in MemberDashboard...');
       
@@ -229,7 +281,7 @@ const MemberDashboard = () => {
           id: `temp-fd-${payment.id || index}`,
           amount: payment.amount,
           created_at: payment.date || payment.created_at,
-          is_active: true,
+          is_active: true, // Assume active until collected by admin
           duration_months: 12,
           interest_rate: 0,
           member: memberId,
@@ -246,9 +298,7 @@ const MemberDashboard = () => {
       } else {
         console.log('No fixed deposit payments found in MemberDashboard payment history');
         setMemberFixedDeposits([]);
-        if (memberId) {
-          localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify([]));
-        }
+        localStorage.setItem(`fixed_deposits_${memberId}`, JSON.stringify([]));
       }
     } catch (err) {
       console.error('Error creating fixed deposits from payment history in MemberDashboard:', err);
@@ -841,19 +891,34 @@ const MemberDashboard = () => {
             {/* NEW: Fixed Deposits Summary */}
             {memberFixedDeposits.length > 0 && (
               <div className="mt-6 bg-white shadow rounded-lg p-6">
-                <h4 className="text-md font-medium text-gray-900 mb-4">Fixed Deposits Summary</h4>
+                <div className="flex justify-between items-center mb-4">
+                  <h4 className="text-md font-medium text-gray-900">Fixed Deposits Summary</h4>
+                  <button
+                    onClick={refreshFixedDeposits}
+                    disabled={loadingFixedDeposits}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1"
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>{loadingFixedDeposits ? "Refreshing..." : "Refresh"}</span>
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">{memberFixedDeposits.filter(fd => fd.is_active !== false).length}</div>
                     <div className="text-sm text-gray-600">Active Deposits</div>
+                    <div className="text-xs text-green-600">₦{getActiveFixedDepositsTotal().toLocaleString()}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600">{memberFixedDeposits.filter(fd => fd.is_active === false).length}</div>
                     <div className="text-sm text-gray-600">Collected Deposits</div>
+                    <div className="text-xs text-green-600">₦{getCollectedFixedDepositsTotal().toLocaleString()}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-600">{memberFixedDeposits.length}</div>
                     <div className="text-sm text-gray-600">Total Deposits</div>
+                    <div className="text-xs text-green-600">₦{(getActiveFixedDepositsTotal() + getCollectedFixedDepositsTotal()).toLocaleString()}</div>
                   </div>
                 </div>
               </div>
