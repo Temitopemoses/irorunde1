@@ -88,24 +88,85 @@ const MemberDashboard = () => {
 
   // Fetch payment history
   const fetchPaymentHistory = async (token) => {
-    try {
-      const response = await fetch(`${API_URL}user/combined-payment-history/`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      });
+  try {
+    console.log('🔄 FETCHING PAYMENT HISTORY');
+    console.log('Token:', token);
+    
+    const response = await fetch(`${API_URL}user/combined-payment-history/`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        setPaymentHistory(data);
-      } else {
-        console.error("Failed to load payment history:", response.status);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Payment history fetched successfully:', data);
+      console.log('Payment history type:', typeof data);
+      console.log('Payment history is array:', Array.isArray(data));
+      console.log('Payment history length:', data.length);
+      
+      // Check if fixed deposits are in the response
+      const hasFixedDeposits = Array.isArray(data) && data.some(item => item.payment_type === 'fixed_deposit');
+      console.log('Payment history contains fixed deposits:', hasFixedDeposits);
+      
+      // Check if any confirmed fixed deposits
+      const confirmedFixedDeposits = Array.isArray(data) && data.filter(item => 
+        item.payment_type === 'fixed_deposit' && 
+        (item.status === 'confirmed' || item.is_successful)
+      );
+      console.log('Confirmed fixed deposits in payment history:', confirmedFixedDeposits);
+      
+      setPaymentHistory(data);
+      
+      // If we have fixed deposits in payment history, create them
+      if (hasFixedDeposits || confirmedFixedDeposits.length > 0) {
+        console.log('Creating fixed deposits from payment history...');
+        const fixedDepositsFromHistory = confirmedFixedDeposits.map((payment, index) => ({
+          id: `fd-${payment.id || index}`,
+          amount: payment.amount,
+          created_at: payment.date || payment.created_at,
+          is_active: true,
+          duration_months: 12,
+          interest_rate: 0,
+          member: userData?.id,
+          payment_reference: payment.reference_number || payment.transaction_reference || `FD-${index}`,
+          status: 'active',
+          _source: 'payment_history'
+        }));
+        
+        console.log('Created fixed deposits from payment history:', fixedDepositsFromHistory);
+        
+        setMemberFixedDeposits(fixedDepositsFromHistory);
+        
+        // Update dashboard financial summary
+        const activeTotal = fixedDepositsFromHistory
+          .filter(fd => fd.is_active !== false)
+          .reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0);
+        
+        setDashboardData(prev => {
+          if (!prev || !prev.financial_summary) return prev;
+          
+          return {
+            ...prev,
+            financial_summary: {
+              ...prev.financial_summary,
+              fixed_deposits: activeTotal,
+              active_fixed_deposits: activeTotal
+            }
+          };
+        });
+        
+        console.log('Updated dashboard with fixed deposits from payment history');
       }
-    } catch (err) {
-      console.error("Payment history fetch error:", err);
+    } else {
+      console.error('❌ Failed to fetch payment history:', response.status);
+      setPaymentHistory([]);
     }
-  };
-
+  } catch (error) {
+    console.error('❌ Error fetching payment history:', error);
+    setPaymentHistory([]);
+  }
+};
   // Fetch group account
   const fetchGroupAccount = async (token) => {
     try {
