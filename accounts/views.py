@@ -2382,37 +2382,42 @@ def admin_member_fixed_deposits(request, member_id):
     
     return Response(fixed_deposits_data)
 
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def collect_fixed_deposit(request, fixed_deposit_id):
     """Mark a fixed deposit as collected"""
     if not (request.user.is_super_admin() or request.user.is_group_admin()):
         return Response({'error': 'Permission denied'}, status=403)
-    
+
     try:
         fixed_deposit = FixedDeposit.objects.get(id=fixed_deposit_id)
-        
+
         # Check if group admin has permission for this member's group
-        if (request.user.is_group_admin() and 
+        if (request.user.is_group_admin() and
             fixed_deposit.member.group != request.user.managed_group):
             return Response({'error': 'You can only collect fixed deposits for your managed group'}, status=403)
-        
+
         if not fixed_deposit.is_active:
             return Response({'error': 'Fixed deposit is already collected'}, status=400)
-        
+
         # Mark as collected
         fixed_deposit.is_active = False
         fixed_deposit.collected_at = timezone.now()
+        fixed_deposit.status = 'collected'  # Add this line
         fixed_deposit.save()
-        
+
         return Response({
             'message': 'Fixed deposit marked as collected successfully',
             'fixed_deposit': {
                 'id': fixed_deposit.id,
                 'amount': float(fixed_deposit.amount),
-                'collected_at': fixed_deposit.collected_at
+                'collected_at': fixed_deposit.collected_at,
+                'is_active': fixed_deposit.is_active,  # Add this
+                'status': fixed_deposit.status  # Add this
             }
         })
-        
+
     except FixedDeposit.DoesNotExist:
         return Response({'error': 'Fixed deposit not found'}, status=404)

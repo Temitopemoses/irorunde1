@@ -532,6 +532,9 @@ class FixedDeposit(models.Model):
     maturity_date = models.DateField()
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, default='active')  # Make sure this field exists
+    collected_at = models.DateTimeField(null=True, blank=True)  
+
     
     class Meta:
         verbose_name = "Fixed Deposit"

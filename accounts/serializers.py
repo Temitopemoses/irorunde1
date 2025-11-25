@@ -616,11 +616,7 @@ class AdminManualPaymentCreateSerializer(serializers.ModelSerializer):
         model = ManualPayment
         fields = ['amount', 'payment_type', 'bank_name', 'transaction_reference', 'transfer_date', 'admin_notes']
     
-    def validate_amount(self, value):
-        if value < 1100:
-            raise serializers.ValidationError("Minimum payment amount is ₦1100")
-        return value
-    
+   
 
 # Add these serializers to your serializers.py
 
