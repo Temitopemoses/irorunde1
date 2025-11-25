@@ -180,78 +180,79 @@ const fetchGroups = async () => {
   const prevStep = () => setStep((s) => s - 1);
 
   // --- Manual payment submission for registration ---
-  const handleManualPayment = async () => {
-    if (!bankName || !transactionReference) {
-      alert("Please provide bank name and transaction reference.");
-      return;
+  // --- Manual payment submission for registration ---
+const handleManualPayment = async () => {
+  if (!bankName || !transactionReference) {
+    alert("Please provide bank name and transaction reference.");
+    return;
+  }
+
+  if (!formData.group) {
+    alert("Please select a group first.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+    console.log("🔄 Submitting registration payment...");
+
+    // Use the correct payment endpoint for registration
+    const response = await fetch(`${API_BASE}payments/registration/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: parseFloat(amount),
+        payment_type: "registration",
+        bank_name: bankName,
+        transaction_reference: transactionReference,
+        transfer_date: transferDate || new Date().toISOString().split('T')[0],
+        // Registration details for linking
+        registration_phone: formData.phone,
+        registration_name: `${formData.first_name} ${formData.surname}`,
+        registration_email: formData.email,
+        registration_card_number: formData.card_number,
+        group_id: formData.group,
+      }),
+    });
+
+    // Handle non-JSON responses
+    const contentType = response.headers.get("content-type");
+    let data;
+    
+    if (contentType && contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      console.error("Non-JSON response:", text);
+      throw new Error("Server returned non-JSON response");
     }
 
-    if (!formData.group) {
-      alert("Please select a group first.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log("🔄 Submitting registration payment...");
-
-      // Use the registration payment endpoint (no auth required)
-      const response = await fetch(`${API_URL}/api/auth/register/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          amount: parseFloat(amount),
-          payment_type: "registration",
-          bank_name: bankName,
-          transaction_reference: transactionReference,
-          transfer_date: transferDate || new Date().toISOString().split('T')[0],
-          // Registration details for linking
-          registration_phone: formData.phone,
-          registration_name: `${formData.first_name} ${formData.surname}`,
-          registration_email: formData.email,
-          registration_card_number: formData.card_number,
-          group_id: formData.group,
-        }),
-      });
-
-      // Handle non-JSON responses
-      const contentType = response.headers.get("content-type");
-      let data;
+    if (response.ok) {
+      setIsPaymentDone(true);
+      setShowPaymentModal(false);
+      alert("✅ Registration payment submitted successfully! Please transfer ₦20,300 to group account. Your registration will be approved once payment is confirmed by admin.");
       
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error("Server returned non-JSON response");
-      }
-
-      if (response.ok) {
-        setIsPaymentDone(true);
-        setShowPaymentModal(false);
-        alert("✅ Registration payment submitted successfully! Please transfer ₦20,300 to the group account. Your registration will be approved once payment is confirmed by admin.");
-        
-        // Reset payment form
-        setBankName("");
-        setTransactionReference("");
-        setTransferDate("");
-      } else {
-        console.error("❌ Payment submission failed:", data);
-        alert(data.error || data.detail || data.message || "Unable to submit payment. Please try again.");
-      }
-    } catch (error) {
-      console.error("❌ Payment submission error:", error);
-      if (error.message.includes("JSON")) {
-        alert("Server error. Please try again later.");
-      } else {
-        alert("Network error while submitting payment. Please check your connection.");
-      }
-    } finally {
-      setLoading(false);
+      // Reset payment form
+      setBankName("");
+      setTransactionReference("");
+      setTransferDate("");
+    } else {
+      console.error("❌ Payment submission failed:", data);
+      alert(data.error || data.detail || data.message || "Unable to submit payment. Please try again.");
     }
-  };
+  } catch (error) {
+    console.error("❌ Payment submission error:", error);
+    if (error.message.includes("JSON")) {
+      alert("Server error. Please try again later.");
+    } else {
+      alert("Network error while submitting payment. Please check your connection.");
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   // --- registration submit (only allowed when manual payment is submitted) ---
   const handleSubmit = async (e) => {
