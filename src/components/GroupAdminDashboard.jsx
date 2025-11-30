@@ -978,14 +978,6 @@ return (
         </h3>
       </div>
       <div className="px-4 py-5 sm:p-6">
-         {members.length > 0 && (
-    <div className="text-xs text-gray-500 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-      <strong>Debug Info - First Member Data:</strong>
-      <pre className="mt-1 whitespace-pre-wrap">
-        {JSON.stringify(members[0], null, 2)}
-      </pre>
-    </div>
-  )}
         {members.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1012,50 +1004,50 @@ return (
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {members
-                  .sort((a, b) => a.card_number.localeCompare(b.card_number))
-                  .map((member) => (
-                    <tr key={member.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        <button
-                          onClick={() => handleViewMemberDashboard(member)}
-                          className="text-amber-600 hover:text-amber-700 font-medium hover:underline text-left"
-                        >
-                          {member.member_name}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.card_number}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.phone}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(member.join_date)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 text-sm font-medium rounded-full ${
-                          member.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : member.status === 'inactive'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {member.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleViewMemberDashboard(member)}
-                          className="text-amber-600 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-md text-xs font-medium transition"
-                        >
-                          View Dashboard
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                }
-              </tbody>
+  {members
+    .sort((a, b) => a.card_number.localeCompare(b.card_number))
+    .map((member) => (
+      <tr key={member.id} className="hover:bg-gray-50">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          <button
+            onClick={() => handleViewMemberDashboard(member)}
+            className="text-amber-600 hover:text-amber-700 font-medium hover:underline text-left"
+          >
+            {member.user.first_name} {member.user.last_name}
+          </button>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          {member.card_number}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          {member.phone}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+          {formatDate(member.registration_date)}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+            member.status === 'active' 
+              ? 'bg-green-100 text-green-800' 
+              : member.status === 'inactive'
+              ? 'bg-red-100 text-red-800'
+              : 'bg-yellow-100 text-yellow-800'
+          }`}>
+            {member.status}
+          </span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <button
+            onClick={() => handleViewMemberDashboard(member)}
+            className="text-amber-600 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1 rounded-md text-xs font-medium transition"
+          >
+            View Dashboard
+          </button>
+        </td>
+      </tr>
+    ))
+  }
+</tbody>
             </table>
           </div>
         ) : (
