@@ -1013,7 +1013,7 @@ return (
                           onClick={() => handleViewMemberDashboard(member)}
                           className="text-amber-600 hover:text-amber-700 font-medium hover:underline text-left"
                         >
-                          {member.user?.first_name} {member.user?.last_name}
+                          {member.user?.first_name || ''} {member.user?.last_name || ''}
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
