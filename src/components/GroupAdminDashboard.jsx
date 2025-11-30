@@ -79,10 +79,10 @@ const GroupAdminDashboard = () => {
 
       const formattedMembers = (Array.isArray(membersData) ? membersData : []).map(member => ({
         id: member.id,
-        first_name: member.first_name,
-        last_name: member.last_name,
+        first_name: member.user?.first_name || '',
+        last_name: member.user?.last_name || '',
         phone: member.phone,
-        join_date: member.join_date,
+        join_date: member.registration_date,
         status: member.status,
         card_number: member.card_number,
         email: member.email,
@@ -1013,7 +1013,7 @@ return (
                           onClick={() => handleViewMemberDashboard(member)}
                           className="text-amber-600 hover:text-amber-700 font-medium hover:underline text-left"
                         >
-                          {member.user.first_name} {member.user.last_name}
+                          {member.first_name} {member.last_name}
                         </button>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1023,7 +1023,7 @@ return (
                         {member.phone}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {member.registration_date ? new Date(member.registration_date).toLocaleDateString() : 'N/A'}
+                        {member.join_date ? new Date(member.join_date).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 text-sm font-medium rounded-full ${
