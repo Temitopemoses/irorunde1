@@ -978,6 +978,14 @@ return (
         </h3>
       </div>
       <div className="px-4 py-5 sm:p-6">
+         {members.length > 0 && (
+    <div className="text-xs text-gray-500 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+      <strong>Debug Info - First Member Data:</strong>
+      <pre className="mt-1 whitespace-pre-wrap">
+        {JSON.stringify(members[0], null, 2)}
+      </pre>
+    </div>
+  )}
         {members.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
