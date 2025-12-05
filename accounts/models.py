@@ -205,19 +205,17 @@ class ManualPayment(models.Model):
         return f"Manual Payment #{self.id} - {self.member.full_name} - ₦{self.amount} - {self.status}"
     
     def save(self, *args, **kwargs):
-    # Auto-generate reference number if not provided
+        # Auto-generate reference number if not provided
         if not self.reference_number:
-        # SHORTER VERSION - Use 2-digit year
-        timestamp = timezone.now().strftime('%y%m%d%H%M%S')  # 12 chars instead of 14
-        self.reference_number = f"M{timestamp}{self.member.card_number}"  # 1 + 12 + 3 = 16 chars ✓
-    
-    # Set confirmed_at timestamp when status changes to confirmed
+            timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
+            self.reference_number = f"MANUAL{timestamp}{self.member.card_number}"
+        
+        # Set confirmed_at timestamp when status changes to confirmed
         if self.status == 'confirmed' and not self.confirmed_at:
-        self.confirmed_at = timezone.now()
-    
+            self.confirmed_at = timezone.now()
+        
         super().save(*args, **kwargs)
-
-class NextOfKin(models.Model):
+    class NextOfKin(models.Model):
     member = models.OneToOneField(Member, on_delete=models.CASCADE, related_name='next_of_kin')
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
