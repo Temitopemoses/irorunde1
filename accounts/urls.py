@@ -14,6 +14,7 @@ from .views import (
 
 app_name = 'accounts'
 
+
 urlpatterns = [
     # ===== AUTHENTICATION & TOKEN MANAGEMENT =====
     path('auth/register/', views.RegisterMemberView.as_view(), name='register'),
