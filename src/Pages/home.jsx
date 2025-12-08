@@ -1,18 +1,85 @@
-import React from "react";
+import React, { useState } from "react";
 import Navbar from "../components/Navbar";
 import president from "../assets/president.jpg";
 import secretary from "../assets/secretary.jpg";
 import ajimotokin from "../assets/Ajimotokin.jpg";
 import { Helmet } from "react-helmet-async";
+
 const Home = () => {
+  const [status, setStatus] = useState({
+    submitting: false,
+    submitted: false,
+    error: null
+  });
+
+  // Replace YOUR_FORM_ID with your actual Formspree form ID
+  const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mzznaeoq';
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    
+    setStatus({ submitting: true, submitted: false, error: null });
+
+    try {
+      const formData = new FormData(form);
+      
+      const response = await fetch(FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        setStatus({
+          submitting: false,
+          submitted: true,
+          error: null
+        });
+        form.reset();
+        
+        // Reset success message after 5 seconds
+        setTimeout(() => {
+          setStatus(prev => ({ ...prev, submitted: false }));
+        }, 5000);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Submission failed');
+      }
+    } catch (error) {
+      setStatus({
+        submitting: false,
+        submitted: false,
+        error: error.message || 'Failed to send message. Please try again.'
+      });
+    }
+  };
+
   return (
-    <><Helmet>
-      <title>Irorunde Cooperative Society</title>
-      <meta
-        name="description"
-        content="Irorunde Cooperative Society is a community-focused financial cooperative dedicated to empowering its members through savings, loans, and various financial services." />
-        <link rel="canonical" href="https://irorunde-cooperative.vercel.app/" /> 
-        </Helmet><div className="font-sans text-gray-800">
+    <>
+      <Helmet>
+        <title>Irorunde Cooperative Society</title>
+        <meta
+          name="description"
+          content="Irorunde Cooperative Society is a community-focused financial cooperative dedicated to empowering its members through savings, loans, and various financial services."
+        />
+        <link rel="canonical" href="https://irorunde-cooperative.vercel.app/" />
+             
+            
+        {/* Additional SEO meta tags */}
+        <meta name="keywords" content="cooperative society, savings, loans, financial empowerment, Nigeria, community banking" />
+        <meta name="author" content="Irorunde Cooperative Society" />
+        <meta name="robots" content="index, follow" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        
+        {/* Favicon links (add these if you have favicon files) */}
+        <link rel="icon" href="/src/assets/logo.png" />
+        <link rel="apple-touch-icon" href="src/assets/logo.png" /> 
+      </Helmet>
+      
+      <div className="font-sans text-gray-800">
         <Navbar />
 
         {/* Hero Section */}
@@ -82,7 +149,6 @@ const Home = () => {
             and mutual financial growth among members. We believe in trust, unity, and
             community empowerment.
           </p>
-
         </section>
 
         {/* Services Section */}
@@ -125,7 +191,7 @@ const Home = () => {
               through transparent cooperative systems.
             </p>
             <p className="text-lg text-gray-700">
-              <strong>Vision:</strong> To become Nigeria’s most trusted cooperative society
+              <strong>Vision:</strong> To become Nigeria's most trusted cooperative society
               promoting inclusive financial empowerment.
             </p>
           </div>
@@ -170,7 +236,8 @@ const Home = () => {
                 <img
                   src={t.img}
                   alt={t.name}
-                  className="w-32 h-32 md:w-40 md:h-40 mx-auto rounded-full object-cover mb-4" />
+                  className="w-32 h-32 md:w-40 md:h-40 mx-auto rounded-full object-cover mb-4"
+                />
                 <h3 className="font-semibold text-lg text-amber-600">{t.name}</h3>
                 <p className="text-gray-600">{t.role}</p>
               </div>
@@ -184,21 +251,88 @@ const Home = () => {
           <p className="max-w-2xl mx-auto text-gray-700 mb-8">
             Have any questions? Reach out to us anytime.
           </p>
-          <form className="max-w-2xl mx-auto grid gap-4">
+          
+          {/* Success/Error Messages */}
+          {status.submitted && (
+            <div className="max-w-2xl mx-auto mb-6 p-4 bg-green-100 text-green-700 rounded-lg">
+              Thank you for your message! We'll get back to you soon.
+            </div>
+          )}
+          
+          {status.error && (
+            <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-100 text-red-700 rounded-lg">
+              {status.error}
+            </div>
+          )}
+
+          <form 
+            onSubmit={handleSubmit}
+            action={FORMSPREE_ENDPOINT}
+            method="POST"
+            className="max-w-2xl mx-auto grid gap-4"
+          >
             <input
               type="text"
+              name="name"
               placeholder="Full Name"
-              className="border rounded-lg p-3 w-full" />
+              className="border rounded-lg p-3 w-full focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition"
+              disabled={status.submitting}
+              required
+            />
+            
             <input
               type="email"
+              name="email"
               placeholder="Email Address"
-              className="border rounded-lg p-3 w-full" />
+              className="border rounded-lg p-3 w-full focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition"
+              disabled={status.submitting}
+              required
+            />
+            
             <textarea
+              name="message"
               placeholder="Your Message"
-              className="border rounded-lg p-3 w-full h-32"
+              className="border rounded-lg p-3 w-full h-32 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition resize-none"
+              disabled={status.submitting}
+              required
             ></textarea>
-            <button className="bg-amber-600 text-white py-3 rounded-lg hover:bg-amber-700 transition">
-              Send Message
+            
+            {/* Hidden fields for better email formatting */}
+            <input type="hidden" name="_subject" value="New Contact Form Submission - Irorunde Cooperative" />
+            <input type="hidden" name="_format" value="plain" />
+            
+            <button
+              type="submit"
+              disabled={status.submitting}
+              className={`bg-amber-600 text-white py-3 rounded-lg hover:bg-amber-700 transition flex items-center justify-center ${
+                status.submitting ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+            >
+              {status.submitting ? (
+                <>
+                  <svg 
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    fill="none" 
+                    viewBox="0 0 24 24"
+                  >
+                    <circle 
+                      className="opacity-25" 
+                      cx="12" 
+                      cy="12" 
+                      r="10" 
+                      stroke="currentColor" 
+                      strokeWidth="4"
+                    ></circle>
+                    <path 
+                      className="opacity-75" 
+                      fill="currentColor" 
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Sending...
+                </>
+              ) : 'Send Message'}
             </button>
           </form>
         </section>
@@ -208,8 +342,12 @@ const Home = () => {
           <p>
             © {new Date().getFullYear()} Irorunde Cooperative Society. All rights reserved.
           </p>
+          <p className="text-sm mt-2 opacity-90">
+            Building financial empowerment through cooperative excellence
+          </p>
         </footer>
-      </div></>
+      </div>
+    </>
   );
 };
 
